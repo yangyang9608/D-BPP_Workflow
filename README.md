@@ -9,7 +9,7 @@ This document provides a detailed, step-by-step guide for running the D-BPP pipe
 
 ## 1. Software Requirements
 ### a. Dsuite
-https://github.com/millanek/Dsuite/tree/master
+https://github.com/millanek/Dsuite/tree/master  
 Citation: Malinsky, M., Matschiner, M. and Svardal, H. (2021) Dsuite ‐ fast D‐statistics and related admixture evidence from VCF files. Molecular Ecology Resources 21, 584–595. doi: https://doi.org/10.1111/1755-0998.13265
 
 ```
@@ -18,14 +18,14 @@ cd Dsuite
 make
 ```
 ### b. BPP
-https://github.com/bpp/bpp
+https://github.com/bpp/bpp  
 Citation: Flouri T., Jiao X., Rannala B., Yang Z. (2018) Species Tree Inference with BPP using Genomic Sequences and the Multispecies Coalescent. Molecular Biology and Evolution, 35(10):2585-2593. doi:10.1093/molbev/msy147
 ```
 wget https://github.com/bpp/bpp/releases/download/v4.8.4/bpp-4.8.4-linux-x86_64.tar.gz
 tar zxvf bpp-4.8.4-linux-x86_64.tar.gz
 ```
-### c. snp-sites
-http://sanger-pathogens.github.io/snp-sites/
+### c. snp-sites  
+http://sanger-pathogens.github.io/snp-sites/  
 Citation: Page AJ, Taylor B, Delaney AJ, Soares J, Seemann T, Keane JA, Harris SR. 2016. SNP-sites: Rapid efficient extraction of SNPs from multi-fasta alignments. Microb Genom 2:e000056
 
 Install Conda and install the bioconda channels.
@@ -81,7 +81,7 @@ The command writes three .newick files to --outdir.
 
 Use Dsuite or an equivalent tool to identify potential introgression events.
 
-**a. Concatenate multi-locus FASTA (optional)**
+**a. Concatenate multi-locus FASTA (optional)**  
 If you have multiple locus-specific FASTA files, you should concatenate them into a single multi-locus alignment.
 
 ```
@@ -96,7 +96,7 @@ snp-sites -v -o output.fasta input.vcf
 
 Once the multi-locus FASTA files have been concatenated and converted to VCF format, you can use Dsuite to compute D-statistics for introgression analysis.
 
-**c. build Dsuite commands (auto)**
+**c. build Dsuite commands (auto)**   
 Given one or more topology files, generate (i) a triolist for each tree and (ii) a runnable shell script with all Dsuite Dtrios commands:
 
 ```
@@ -170,9 +170,14 @@ python cal_b10.py posterior.txt B10_summary.txt
 ```
 
 ### 7. Marginal likelihood
-**a. run BFdriver**
+**a. run with BFdriver (thermodynamic integration)**
 
-
+```
+#!/bin/bash
+bpp --bfdriver input.ctl --points 16 && \
+for i in {1..16}; do sed -i "s/name\.job/-$i.job/g" "input.ctl.$i"; done && \
+for i in {1..16}; do nohup bpp -cfile "input.ctl.$i" & done
+```
 
 **b. Compute log marginal likelihood**
 ```
