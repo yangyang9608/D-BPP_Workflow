@@ -162,14 +162,14 @@ bpp -cfile bpp.ctl
 
 ```
 
-### 6. Summarize B<sub>10 
+## 6. Summarize B<sub>10 
  **a. Compute ​from posterior samples**
  For a table where each phi* column contains posterior samples, compute B<sub>10 with the default cutoff ε=0.01 :
  ```
 python cal_b10.py posterior.txt B10_summary.txt
 ```
 
-### 7. Marginal likelihood
+## 7. Marginal likelihood
 **a. run with BFdriver (thermodynamic integration)**
 
 ```
