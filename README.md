@@ -77,21 +77,13 @@ Generate the three rooted topologies where A/B/C form a clade and D/E are sister
 This command writes three separate .newick files (one tree per file) to --outdir, e.g.
 results/topo_1.newick, results/topo_2.newick, results/topo_3.newick.
 
-**c. imap.txt**  
-This file maps individuals to species for the D-statistic (Dsuite) and BPP analysis.   
-The file must contain two tab-separated columns: INDIVIDUAL_ID<TAB>SPECIES_ID.    
+**c. Individual-to-Species Mapping**  
 
-**Note:** For D-statistics, imap.txt should include the designated outgroup. The outgroup (which can consist of multiple samples) must be specified by using the keyword Outgroup in place of the SPECIES_ID. However, if you run BPP on datasets where the outgroup has been removed, you must delete the outgroup line(s) from the BPP input files.
- 
-Example:
+This file defines the correspondence between individuals and species for D-statistic (Dsuite) and BPP analysis. To specify the outgroup (which may comprise multiple individuals), use the keyword `Outgroup` as the SPECIES_ID.
+
+Format:
 ```
-A1  A
-A2  A
-B1  B
-B2  B
-C1  C
-C2  C
-d1  Outgroup
+<sample_name>TAB<species_name>
 ```
 
 
