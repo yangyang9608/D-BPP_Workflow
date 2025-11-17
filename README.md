@@ -78,7 +78,7 @@ This command writes three separate .newick files (one tree per file) to --outdir
 results/topo_1.newick, results/topo_2.newick, results/topo_3.newick.
 
 **c. imap.txt**  
-This file maps individuals to species for the D-statistic (Dsuite) and BPP analysis.
+This file maps individuals to species for the D-statistic (Dsuite) and BPP analysis.   
 **Note:** The imap.txt used for D-statistics should include the designated outgroup. The outgroup (can be multiple samples) should be specified by using the keywork Outgroup in place of the SPECIES_ID". However, if you run BPP on datasets where the outgroup has been removed, you must delete the outgroup line from the BPP input files.   
  
 Example:
