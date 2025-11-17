@@ -79,7 +79,9 @@ results/topo_1.newick, results/topo_2.newick, results/topo_3.newick.
 
 **c. imap.txt**  
 This file maps individuals to species for the D-statistic (Dsuite) and BPP analysis.   
-**Note:** The imap.txt used for D-statistics should include the designated outgroup. The outgroup (can be multiple samples) should be specified by using the keywork Outgroup in place of the SPECIES_ID". However, if you run BPP on datasets where the outgroup has been removed, you must delete the outgroup line from the BPP input files.   
+The file must contain two tab-separated columns: INDIVIDUAL_ID<TAB>SPECIES_ID.    
+
+**Note:** For D-statistics, imap.txt should include the designated outgroup. The outgroup (which can consist of multiple samples) must be specified by using the keyword Outgroup in place of the SPECIES_ID. However, if you run BPP on datasets where the outgroup has been removed, you must delete the outgroup line(s) from the BPP input files.
  
 Example:
 ```
