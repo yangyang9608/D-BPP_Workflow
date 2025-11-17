@@ -64,7 +64,6 @@ Provide candidate species trees in Newick format (from prior analyses or literat
 Example:
 ```
 (((Sp1,Sp2),Sp3),Outgroup);
-(((Sp1,Sp3),Sp1),Outgroup);
 ```
 **Auto-generate constrained 5-taxon topologies.**
 Generate the three rooted topologies where A/B/C form a clade and D/E are sisters (optionally with an outgroup).
@@ -75,7 +74,24 @@ Generate the three rooted topologies where A/B/C form a clade and D/E are sister
   # with outgroup
   python get_topos.py --abc A B C --sisters D E --outgroup O --outdir results --prefix topo_
 ```
-The command writes three .newick files to --outdir.
+This command writes three separate .newick files (one tree per file) to --outdir, e.g.
+results/topo_1.newick, results/topo_2.newick, results/topo_3.newick.
+
+**c. imap.txt**  
+This file maps individuals to species for the D-statistic (Dsuite) and BPP analysis.
+**Note:** The imap.txt used for D-statistics should include the designated outgroup. The outgroup (can be multiple samples) should be specified by using the keywork Outgroup in place of the SPECIES_ID". However, if you run BPP on datasets where the outgroup has been removed, you must delete the outgroup line from the BPP input files.   
+ 
+Example:
+```
+A1  A
+A2  A
+B1  B
+B2  B
+C1  C
+C2  C
+d1  Outgroup
+```
+
 
 ## 3. D-statistic (ABBA-BABA)
 
@@ -96,8 +112,10 @@ snp-sites -v -o output.fasta input.vcf
 
 Once the multi-locus FASTA files have been concatenated and converted to VCF format, you can use Dsuite to compute D-statistics for introgression analysis.
 
-**c. build Dsuite commands (auto)**   
-Given one or more topology files, generate (i) a triolist for each tree and (ii) a runnable shell script with all Dsuite Dtrios commands:
+
+**c. build Dsuite commands**   
+Given one or more topology files, generate (i) a triolist for each tree and (ii) a runnable shell script with all Dsuite Dtrios commands.   
+**Note:** Tree files must be in standard Newick format without any spaces (including in taxon names). If your Newick file contains spaces, please replace them with underscores or remove the spaces before running this script.
 
 ```
 python make_dsuite_cmds.py \
@@ -112,10 +130,12 @@ python make_dsuite_cmds.py \
 #   dsuite_runs/run_dsuite.sh
 
 ```
+
+
 **d. Run Dsuite**
 ```
 bash dsuite_runs/run_dsuite.sh
-# Or: Dsuite Dtrios output.vcf imap.txt --tree=TREE_FILE.nwk -o outprefix <triolist>
+# Or: Dsuite Dtrios output.vcf imap.txt --tree=TREE_FILE.nwk -o outprefix 
 ```
 Dsuite outputs <outprefix>_tree.txt containing D, Z, p, f4-ratio and counts (BBAA/ABBA/BABA).
 
