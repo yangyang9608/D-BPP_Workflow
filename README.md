@@ -36,6 +36,25 @@ conda config --add channels r
 conda config --add channels bioconda
 conda install snp-sites
 ```
+### d. Set executable paths in your shell  
+
+For convenience, you can add the paths to BPP, Dsuite, and SNP-sites to your shell environment.
+Edit your ~/.bashrc and add:
+```
+# Define Software Paths
+export PATH_BPP="/your/path/to/bpp"
+export PATH_DSUITE="/your/path/to/dsuite"
+export PATH_SNP_SITES="/your/path/to/snp-sites"
+
+# Add to PATH
+export PATH="$PATH_BPP:$PATH_DSUITE:$PATH_SNP_SITES:$PATH"
+```
+
+Then reload your shell configuration:
+```
+source ~/.bashrc  
+```
+
 
 ## 2. Data Preparation
 
