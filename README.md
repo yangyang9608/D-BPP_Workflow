@@ -71,7 +71,7 @@ Generate the three rooted topologies where A/B/C form a clade and D/E are sister
 # without outgroup
   python get_topos.py --abc A B C --sisters D E
 
-  # with outgroup
+# with outgroup
   python get_topos.py --abc A B C --sisters D E --outgroup O --outdir results --prefix topo_
 ```
 This command writes three separate .newick files (one tree per file) to --outdir, e.g.
