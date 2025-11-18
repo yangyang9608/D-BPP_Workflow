@@ -56,7 +56,82 @@ source ~/.bashrc
 ```
 
 
-## 2. Data Preparation
+## 2. Data Preparation  
+
+### a. Sequence Data
+
+If you have **one FASTA file per locus**, you can prepare input for both Dsuite (VCF) and BPP (PHYLIP) using the steps below.
+
+---
+
+**a1. Concatenate multi-locus FASTA and convert FASTA → VCF (for Dsuite)**  
+
+First concatenate all locus-specific FASTA files into a single multi-locus alignment, then convert this alignment to VCF format for use with Dsuite:
+
+```bash
+perl concatenate_multi-locus.pl file_list indir output.fasta
+# file_list: one FASTA filename per line
+# indir:     directory containing those FASTA files
+# output:    concatenated multi-locus alignment (output.fasta)
+
+# Convert concatenated FASTA to SNP-only VCF (for Dsuite)
+snp-sites -v -o output.vcf output.fasta
+
+
+**a2: Prepare BPP inputs (PHYLIP format)**  
+
+For BPP, multilocus sequence data are stored in a single PHYLIP-style file (`loci.bpp`), organized as one block per locus.
+
+If you have one FASTA file per locus, you can convert them to a BPP-ready PHYLIP file with:
+
+```
+perl fasta2bpp.pl input_dir loci.list > loci.bpp
+# input_dir : directory containing per-locus FASTA files
+# loci.list : plain-text file with one FASTA filename per line
+# loci.bpp  : output multilocus file in PHYLIP-style format for BPP
+```
+The script expects:
+
+·input_dir contains all per-locus FASTA files.
+
+·loci.list lists the locus FASTA files, e.g.:
+
+**a. loci.bpp**
+
+Create a list of loci and convert FASTA to BPP format:
+```
+perl fasta2bpp.pl input_dir loci.list > loci.bpp
+```
+Each locus block starts with “<nseq> <seqlen>”, followed by lines like locus1^A1 ACTG.....
+```
+locus1.fasta
+locus2.fasta
+locus3.fasta
+```
+The resulting loci.bpp file is PHYLIP-style and block-structured:
+```
+<nseq> <seqlen>
+locus1^A1   ACTG...
+locus1^A2   ACTG...
+locus1^B1   ACTG...
+...
+```
+<nseq> <seqlen>
+locus2^A1   ACTG...
+locus2^A2   ACTG...
+locus2^B1   ACTG...
+...
+·Each locus block starts with a header line:
+nseq seqlen (number of sequences, sequence length).
+
+·Followed by nseq lines in standard PHYLIP style:
+TAXON_ID<whitespace>SEQUENCE
+
+·TAXON_ID is typically locusID^sampleID (e.g. locus1^A1), as produced by the script.
+
+If you choose to exclude the outgroup from BPP analyses (recommended in many D-BPP use cases), make sure the corresponding outgroup sequences are not included in loci.bpp (either by omitting those samples in the input FASTAs or by removing them after conversion).
+
+
 
 ### a. Sequence Data
 
@@ -78,23 +153,8 @@ AAGATTC...
 >Outgroup
 ...
 ```
-### b. Species Tree Topologies
-Provide candidate species trees in Newick format (from prior analyses or literature). 
-Example:
-```
-(((Sp1,Sp2),Sp3),Outgroup);
-```
-**Auto-generate constrained 5-taxon topologies.**
-Generate the three rooted topologies where A/B/C form a clade and D/E are sisters (optionally with an outgroup).
-```
-# without outgroup
-  python get_topos.py --abc A B C --sisters D E
 
-# with outgroup
-  python get_topos.py --abc A B C --sisters D E --outgroup O --outdir results --prefix topo_
-```
-This command writes three separate .newick files (one tree per file) to --outdir, e.g.
-results/topo_1.newick, results/topo_2.newick, results/topo_3.newick.
+
 
 **c. Individual-to-Species Mapping**  
 
@@ -110,23 +170,20 @@ Format:
 
 Use Dsuite or an equivalent tool to identify potential introgression events.
 
-**a. Concatenate multi-locus FASTA (optional)**  
-If you have multiple locus-specific FASTA files, you should concatenate them into a single multi-locus alignment.
-
-```
-perl concatenate_multi-locus.pl file_list indir output.fasta
-# file_list: one FASTA filename per line; indir: directory containing those files
-```
-**b. Convert FASTA → VCF**
-
-```
-snp-sites -v -o output.fasta input.vcf
-```
-
-Once the multi-locus FASTA files have been concatenated and converted to VCF format, you can use Dsuite to compute D-statistics for introgression analysis.
 
 
-**c. build Dsuite commands**   
+
+**c. Run D-statistic within D-BPP workflow (Dsuite + 𝐷ₚ ranking)
+
+Use the D-statistic.sh wrapper to:
+
+run Dsuite Dtrios for each candidate species tree,
+
+compute 𝐷ₚ for each trio,
+
+filter trios by significance (Z-score or p-value),
+
+and output 𝐷ₚ-sorted result tables.**   
 Given one or more topology files, generate (i) a triolist for each tree and (ii) a runnable shell script with all Dsuite Dtrios commands.   
 **Note:** Tree files must be in standard Newick format without any spaces (including in taxon names). If your Newick file contains spaces, please replace them with underscores or remove the spaces before running this script.
 
@@ -166,15 +223,6 @@ python dp_from_Dsuite.py --dir dsuite_runs --glob "*_tree.txt" \
 
 ```
 Outputs *_withDp_sorted.txt, preserving original columns and adding 𝐷𝑝.
-
-## 5. Prepare BPP Inputs
-**a. loci.bpp**
-
-Create a list of loci and convert FASTA to BPP format:
-```
-perl fasta2bpp.pl input_dir loci.list > loci.bpp
-```
-Each locus block starts with “<nseq> <seqlen>”, followed by lines like locus1^A1 ACTG.....
 
 
 **b. imap.txt**
