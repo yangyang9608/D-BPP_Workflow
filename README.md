@@ -58,11 +58,11 @@ source ~/.bashrc
 
 ## 2. Data Preparation  
 
+---
+
 ### a. Sequence Data
 
-If you have **one FASTA file per locus**, you can prepare input for both Dsuite (VCF) and BPP (PHYLIP) using the steps below.
-
----
+If you have **one FASTA file per locus**, you can prepare input for both Dsuite (VCF) and BPP (PHYLIP) using the steps below.  
 
 **a1. Concatenate multi-locus FASTA and convert FASTA → VCF (for Dsuite)**  
 
@@ -76,38 +76,21 @@ perl concatenate_multi-locus.pl file_list indir output.fasta
 
 # Convert concatenated FASTA to SNP-only VCF (for Dsuite)
 snp-sites -v -o output.vcf output.fasta
+```
 
 
 **a2: Prepare BPP inputs (PHYLIP format)**  
 
-For BPP, multilocus sequence data are stored in a single PHYLIP-style file (`loci.bpp`), organized as one block per locus.
+For BPP, multilocus sequence data are stored in a single PHYLIP-style file (`loci.bpp`), organized as one block per locus. 
 
 If you have one FASTA file per locus, you can convert them to a BPP-ready PHYLIP file with:
-
 ```
 perl fasta2bpp.pl input_dir loci.list > loci.bpp
 # input_dir : directory containing per-locus FASTA files
 # loci.list : plain-text file with one FASTA filename per line
 # loci.bpp  : output multilocus file in PHYLIP-style format for BPP
 ```
-The script expects:
 
-·input_dir contains all per-locus FASTA files.
-
-·loci.list lists the locus FASTA files, e.g.:
-
-**a. loci.bpp**
-
-Create a list of loci and convert FASTA to BPP format:
-```
-perl fasta2bpp.pl input_dir loci.list > loci.bpp
-```
-Each locus block starts with “<nseq> <seqlen>”, followed by lines like locus1^A1 ACTG.....
-```
-locus1.fasta
-locus2.fasta
-locus3.fasta
-```
 The resulting loci.bpp file is PHYLIP-style and block-structured:
 ```
 <nseq> <seqlen>
@@ -115,48 +98,25 @@ locus1^A1   ACTG...
 locus1^A2   ACTG...
 locus1^B1   ACTG...
 ...
-```
 <nseq> <seqlen>
 locus2^A1   ACTG...
 locus2^A2   ACTG...
 locus2^B1   ACTG...
 ...
-·Each locus block starts with a header line:
+```
+
+- Each locus block starts with a header line:
 nseq seqlen (number of sequences, sequence length).
 
-·Followed by nseq lines in standard PHYLIP style:
+- Followed by nseq lines in standard PHYLIP style:
 TAXON_ID<whitespace>SEQUENCE
 
-·TAXON_ID is typically locusID^sampleID (e.g. locus1^A1), as produced by the script.
+- TAXON_ID is typically locusID^sampleID (e.g. locus1^A1), as produced by the script.
 
 If you choose to exclude the outgroup from BPP analyses (recommended in many D-BPP use cases), make sure the corresponding outgroup sequences are not included in loci.bpp (either by omitting those samples in the input FASTAs or by removing them after conversion).
 
 
-
-### a. Sequence Data
-
-- **Input:** Multi-locus sequence alignments, including both ingroup species and at least one designated outgroup.
-- **Format:** Multi-FASTA. Ensure sample names are consistent throughout all analyses.
-
-#### Example: Multi-FASTA Format
-
-```
->Sp1
-ATGCTAG...
->Sp2
-ATGCCAG...
->Sp3
-AATCCTG...
->Sp4
-AAGATTC...
-……
->Outgroup
-...
-```
-
-
-
-**c. Individual-to-Species Mapping**  
+### b. Individual-to-Species Mapping 
 
 This file defines the correspondence between individuals and species for D-statistic (Dsuite) and BPP analysis. To specify the outgroup (which may comprise multiple individuals), use the keyword `Outgroup` as the SPECIES_ID.
 
@@ -164,13 +124,17 @@ Format:
 ```
 <sample_name>TAB<species_name>
 ```
+### c. species tree topology
 
+Provide candidate species trees in Newick format (from prior analyses or literature). 
+Example:
+```
+(((Sp1,Sp2),Sp3),Outgroup);
+```
 
 ## 3. D-statistic (ABBA-BABA)
 
 Use Dsuite or an equivalent tool to identify potential introgression events.
-
-
 
 
 **c. Run D-statistic within D-BPP workflow (Dsuite + 𝐷ₚ ranking)
