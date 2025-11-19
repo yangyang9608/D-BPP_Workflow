@@ -117,7 +117,7 @@ If you choose to exclude the outgroup from BPP analyses (recommended in many D-B
 
 ### b. Individual-to-Species Mapping 
 
-This file defines the correspondence between individuals and species for D-statistic (Dsuite) and BPP analysis. To specify the outgroup (which may comprise multiple individuals), use the keyword `Outgroup` as the SPECIES_ID.
+This file (imap.txt) defines the correspondence between individuals and species for D-statistic (Dsuite) and BPP analysis. To specify the outgroup (which may comprise multiple individuals), use the keyword `Outgroup` as the SPECIES_ID.
 
 Format:
 ```
