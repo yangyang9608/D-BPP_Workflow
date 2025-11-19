@@ -58,7 +58,6 @@ source ~/.bashrc
 
 ## 2. Data Preparation  
 
----
 
 ### a. Sequence Data
 
@@ -137,69 +136,23 @@ Example:
 Use Dsuite or an equivalent tool to identify potential introgression events.
 
 
-**c. Run D-statistic within D-BPP workflow (Dsuite + 𝐷ₚ ranking)
+**Run D-statistic within D-BPP workflow (Dsuite + 𝐷ₚ ranking)**
 
-Use the D-statistic.sh wrapper to:
-
-run Dsuite Dtrios for each candidate species tree,
-
-compute 𝐷ₚ for each trio,
-
-filter trios by significance (Z-score or p-value),
-
-and output 𝐷ₚ-sorted result tables.**   
-Given one or more topology files, generate (i) a triolist for each tree and (ii) a runnable shell script with all Dsuite Dtrios commands.   
+Use the D-statistic.sh wrapper to: run Dsuite Dtrios for each candidate species tree, compute 𝐷ₚ for each trio, filter trios by significance (Z-score or p-value), and output 𝐷ₚ-sorted result tables.
 **Note:** Tree files must be in standard Newick format without any spaces (including in taxon names). If your Newick file contains spaces, please replace them with underscores or remove the spaces before running this script.
 
 ```
-python make_dsuite_cmds.py \
+bash D-statistic.sh \
   --vcf output.vcf \
   --imap imap.txt \
-  --trees results/*.newick \
-  --outdir dsuite_runs \
-  --prefix run_ \
-  --print
-# This creates:
-#   dsuite_runs/<tree-basename>.trios.txt
-#   dsuite_runs/run_dsuite.sh
+  --treelist treelist.txt \
+  --filter p-value \
+  --cutoff 0.01 \
+  --prefix Sig-Dp
 
 ```
 
 
-**d. Run Dsuite**
-```
-bash dsuite_runs/run_dsuite.sh
-# Or: Dsuite Dtrios output.vcf imap.txt --tree=TREE_FILE.nwk -o outprefix 
-```
-Dsuite outputs <outprefix>_tree.txt containing D, Z, p, f4-ratio and counts (BBAA/ABBA/BABA).
-
-## 4. Rank signals by 𝐷𝑝 (with significance filtering) 
-
-Compute 𝐷𝑝 =(ABBA−BABA)/(BBAA+ABBA+BABA), filter by |Z| or p, and sort by 𝐷𝑝
-
-```
-# Z-filter (default |Z|>=3), keep all rows
-python dp_from_Dsuite.py --dir dsuite_runs --glob "*_tree.txt" --outdir dsuite_runs/dp
-
-# p-filter (p<=0.01) and drop non-significant rows
-python dp_from_Dsuite.py --dir dsuite_runs --glob "*_tree.txt" \
-  --sig p --pmax 0.01 --drop-nonsig --outdir dsuite_runs/dp
-
-```
-Outputs *_withDp_sorted.txt, preserving original columns and adding 𝐷𝑝.
-
-
-**b. imap.txt**
-Map individuals to species:
-
-```
-A1  A
-A2  A
-B1  B
-B2  B
-C1  C
-C2  C
-```
 **c. bpp.ctl**
 Edit file paths, MSCI model, priors, and MCMC settings, then run:
 ```
