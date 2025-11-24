@@ -85,8 +85,7 @@ Optional parameters:
   --prefix <prefix>     Output prefix (path will be created if needed; default: Sig-Dp)
 
 Output:
-  For each tree in treelist, generates prefix-Tree*-triples.txt containing
-  all significant triples (after Bonferroni correction) sorted by 𝐷𝑝 value in descending order
+  For each tree in treelist, generates prefix-Tree*-triples.txt containing all significant triples (after Bonferroni correction) sorted by 𝐷𝑝 value in descending order
 
 ```
 
