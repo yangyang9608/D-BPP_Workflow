@@ -7,7 +7,7 @@ This document provides a detailed, step-by-step guide for running the D-BPP pipe
 
 ---
 
-## 1. Software Requirements
+## 0. Software Requirements
 ### a. Dsuite
 https://github.com/millanek/Dsuite/tree/master  
 Citation: Malinsky, M., Matschiner, M. and Svardal, H. (2021) Dsuite ‐ fast D‐statistics and related admixture evidence from VCF files. Molecular Ecology Resources 21, 584–595. doi: https://doi.org/10.1111/1755-0998.13265
@@ -36,6 +36,15 @@ conda config --add channels r
 conda config --add channels bioconda
 conda install snp-sites
 ```
+### d. Newick Utilities 
+https://github.com/tjunier/newick_utils   
+```
+git clone https://github.com/tjunier/newick_utils.git
+cd newick_utils
+./configure
+make
+```
+
 ### d. Set executable paths in your shell  
 
 For convenience, you can add the paths to BPP, Dsuite, and SNP-sites to your shell environment.
@@ -45,9 +54,10 @@ Edit your ~/.bashrc and add:
 export PATH_BPP="/your/path/to/bpp"
 export PATH_DSUITE="/your/path/to/dsuite"
 export PATH_SNP_SITES="/your/path/to/snp-sites"
+export PATH_NEWICK_UTILS="/your/path/to/newick_utils"
 
 # Add to PATH
-export PATH="$PATH_BPP:$PATH_DSUITE:$PATH_SNP_SITES:$PATH"
+export PATH="$PATH_BPP:$PATH_DSUITE:$PATH_SNP_SITES:PATH_NEWICK_UTILS:$PATH"
 ```
 
 Then reload your shell configuration:
@@ -55,120 +65,70 @@ Then reload your shell configuration:
 source ~/.bashrc  
 ```
 
+## 1. The *D*-statictic within D-BPP workflow  
 
-## 2. Data Preparation  
+We provide a shell script that runs Dsuite for each candidate species tree (supplied by the user in a tree-list file) and reports significant triples ranked by *D<sub>p</sub>*.
 
-
-### a. Sequence Data
-
-If you have **one FASTA file per locus**, you can prepare input for both Dsuite (VCF) and BPP (PHYLIP) using the steps below.  
-
-**a1. Concatenate multi-locus FASTA and convert FASTA → VCF (for Dsuite)**  
-
-First concatenate all locus-specific FASTA files into a single multi-locus alignment, then convert this alignment to VCF format for use with Dsuite:
-
-```bash
-perl concatenate_multi-locus.pl file_list indir output.fasta
-# file_list: one FASTA filename per line
-# indir:     directory containing those FASTA files
-# output:    concatenated multi-locus alignment (output.fasta)
-
-# Convert concatenated FASTA to SNP-only VCF (for Dsuite)
-snp-sites -v -o output.vcf output.fasta
-```
-
-
-**a2: Prepare BPP inputs (PHYLIP format)**  
-
-For BPP, multilocus sequence data are stored in a single PHYLIP-style file (`loci.bpp`), organized as one block per locus. 
-
-If you have one FASTA file per locus, you can convert them to a BPP-ready PHYLIP file with:
-```
-perl fasta2bpp.pl input_dir loci.list > loci.bpp
-# input_dir : directory containing per-locus FASTA files
-# loci.list : plain-text file with one FASTA filename per line
-# loci.bpp  : output multilocus file in PHYLIP-style format for BPP
-```
-
-The resulting loci.bpp file is PHYLIP-style and block-structured:
-```
-<nseq> <seqlen>
-locus1^A1   ACTG...
-locus1^A2   ACTG...
-locus1^B1   ACTG...
-...
-<nseq> <seqlen>
-locus2^A1   ACTG...
-locus2^A2   ACTG...
-locus2^B1   ACTG...
-...
-```
-
-- Each locus block starts with a header line:
-nseq seqlen (number of sequences, sequence length).
-
-- Followed by nseq lines in standard PHYLIP style:
-TAXON_ID<whitespace>SEQUENCE
-
-- TAXON_ID is typically locusID^sampleID (e.g. locus1^A1), as produced by the script.
-
-If you choose to exclude the outgroup from BPP analyses (recommended in many D-BPP use cases), make sure the corresponding outgroup sequences are not included in loci.bpp (either by omitting those samples in the input FASTAs or by removing them after conversion).
-
-
-### b. Individual-to-Species Mapping 
-
-This file (imap.txt) defines the correspondence between individuals and species for D-statistic (Dsuite) and BPP analysis. To specify the outgroup (which may comprise multiple individuals), use the keyword `Outgroup` as the SPECIES_ID.
-
-Format:
-```
-<sample_name>TAB<species_name>
-```
-### c. species tree topology
-
-Provide candidate species trees in Newick format (from prior analyses or literature). 
-Example:
-```
-(((Sp1,Sp2),Sp3),Outgroup);
-```
-
-## 3. D-statistic (ABBA-BABA)
-
-Use Dsuite or an equivalent tool to identify potential introgression events.
-
-
-**Run D-statistic within D-BPP workflow (Dsuite + 𝐷ₚ ranking)**
-
-Use the D-statistic.sh wrapper to: run Dsuite Dtrios for each candidate species tree, compute 𝐷ₚ for each trio, filter trios by significance (Z-score or p-value), and output 𝐷ₚ-sorted result tables.
-**Note:** Tree files must be in standard Newick format without any spaces (including in taxon names). If your Newick file contains spaces, please replace them with underscores or remove the spaces before running this script.
 
 ```
-bash D-statistic.sh \
-  --vcf output.vcf \
-  --imap imap.txt \
-  --treelist treelist.txt \
-  --filter p-value \
-  --cutoff 0.01 \
-  --prefix Sig-Dp
+Usage: bash D-step.sh (--fasta_dir <fasta_dir> |--vcf_file <vcf_file>) --imap <imap_file> --treelist <treelist_file> [--prefix <output_prefix>] [--cutoff <value>]
+
+Required parameters (choose one input type):
+  --fasta_dir <dir>     Directory containing locus FASTA files
+  --vcf_file <file>     VCF file
+Other Required parameters:
+  --imap <file>         Individual to species mapping file <sample_name>TAB<species_name>
+  --treelist <file>     File containing multiple trees (one per line)
+
+Optional parameters:
+  --cutoff <value>      Cutoff value for p-value (default: 0.01)
+  --prefix <prefix>     Output prefix (path will be created if needed; default: Sig-Dp)
+
+Output:
+  For each tree in treelist, generates prefix-Tree*-triples.txt containing
+  all significant triples (after Bonferroni correction) sorted by 𝐷𝑝 value in descending order
 
 ```
 
 
-**c. bpp.ctl**
-Edit file paths, MSCI model, priors, and MCMC settings, then run:
+## 2. The BPP analysis within D-BPP workflow  
+
+### a. Prepare for control file
+The script can automatically generates first-round BPP control files implementing our three-model comparison of introgression (inflow, outflow, and ghost).  
+
+To date, the current implementation does not yet cover the complete D-BPP workflow, but we will continue to update BPP-step.sh to enable iterative refinement—generating updated BPP control files based on previous BPP results—until all significant triples are fully explained and a final comprehensive introgression model is obtained.
+
+
+```
+Usage: bash BPP-step.sh (--fasta_dir <fasta_directory> | --phylip_file <phylip_file>) --imap <imap_file> --tree <tree_file> --dstat <dstat_file> --prefix <output_prefix>
+
+Required parameters (choose one input type):
+  --fasta_dir <dir>     Directory containing locus FASTA files
+  --phylip_file <file>  Existing BPP-PHYLIP file
+
+Other required parameters:
+  --imap <file>         Individual to species mapping file (tab-delimited)
+  --tree <file>         Species tree file
+  --dstat <file>        D-statistic results file
+  --prefix <prefix>     Output prefix for BPP files
+
+Optional parameters:
+  --skip_validation     Skip PHYLIP file format validation (only with --phylip_file)
+```
+### b. run BPP
 ```
 bpp -cfile bpp.ctl
-
 ```
 
-## 6. Summarize B<sub>10 
+## c. Summarize *B*<sub>10 
  **a. Compute ​from posterior samples**
- For a table where each phi* column contains posterior samples, compute B<sub>10 with the default cutoff ε=0.01 :
+ For a table where each phi* column contains posterior samples, compute *B*<sub>10</sub> with the default cutoff *ε*=0.01 :
  ```
 python cal_b10.py posterior.txt B10_summary.txt
 ```
 
-## 7. Marginal likelihood
-**a. run with BFdriver (thermodynamic integration)**
+## d. Marginal likelihood
+**d1. run with BFdriver (thermodynamic integration)**
 
 ```
 #!/bin/bash
@@ -177,9 +137,9 @@ for i in {1..16}; do sed -i "s/name\.job/-$i.job/g" "input.ctl.$i"; done && \
 for i in {1..16}; do nohup bpp -cfile "input.ctl.$i" & done
 ```
 
-**b. Compute log marginal likelihood**
+**d2. Compute log marginal likelihood**
 ```
-python cal_LNK.py model.betaweights.csv "*.out.*" LNK.txt
+python cal_marginal_likelihoods.py model.betaweights.csv "*.out.*" LNK.txt
 # prints the weighted sum and writes results/model_lnK.txt
 ```
 
