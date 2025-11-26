@@ -31,7 +31,7 @@ def parse_betaweights_file(betaweights_file):
         
         # 检查权重和是否为1（验证数据）
         total_weight = sum(beta_weight_map.values())
-        print(f"权重总和: {total_weight:.6f} (应该接近1)")
+        
         
         return beta_weight_map
     
