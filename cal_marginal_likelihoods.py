@@ -29,10 +29,6 @@ def parse_betaweights_file(betaweights_file):
         
         print(f"从 {betaweights_file} 中读取到 {len(beta_weight_map)} 个beta权重对")
         
-        # 检查权重和是否为1（验证数据）
-        total_weight = sum(beta_weight_map.values())
-        
-        
         return beta_weight_map
     
     except Exception as e:
