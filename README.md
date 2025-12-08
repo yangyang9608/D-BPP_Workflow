@@ -67,7 +67,7 @@ source ~/.bashrc
 
 ## 1. Prepare Input Files
 ### a. Genetic Data Files
-**Option 1: FASTA Files** (Recommended, for both D and BPP analysis)
+**Option 1: FASTA Files** (Recommended, for both *D* and BPP analysis)
 - One FASTA file per locus
 - **File naming convention**: Must end with `.fa`, `.fas`, or `.fasta`
   - Example: `locus1.fasta`, `locus2.fas`, `chromosome5.fa`
@@ -75,7 +75,7 @@ source ~/.bashrc
   - All samples (including outgroup)
   - Aligned sequences for the same locus
   
-**Option 2: VCF File** (Only for D analysis)
+**Option 2: VCF File** (Only for *D* analysis)
 - A single VCF file containing all loci and samples
 - Must include an outgroup sample
 
