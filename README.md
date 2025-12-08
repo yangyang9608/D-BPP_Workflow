@@ -273,7 +273,7 @@ In the `--prefix` specified directory, the script generates 5 essential files:
 | 5. `*_control.ctl` | BPP control file | Always |
 
 **Example first run:**
-# Round 1: Generating the BPP ctl file for Round 1
+### Round 1: Generating the BPP ctl file for Round 1
 ```bash
 bash BPP-step.sh --fasta_dir ./fasta_dir/ \
   --imap Test.imap \
