@@ -3,7 +3,7 @@ usage() {
     echo "Usage: bash $0 (--fasta_dir <fasta_dir> |--vcf_file <vcf_file>) --imap <imap_file> --treelist <treelist_file> [--prefix <output_prefix>] [--cutoff <value>]"
     echo ""
 	echo "Required parameters (choose one input type):"
-	echo "  --fasta_dir <dir>     Directory containing locus FASTA files"
+	echo "  --fasta_dir <dir>     Directory containing locus FASTA files (.fa, .fas, .fasta)"
 	echo "  --vcf_file <file>     VCF file"
 
     echo "Other Required parameters:"
@@ -11,8 +11,8 @@ usage() {
     echo "  --treelist <file>     File containing multiple trees (one per line)"
     echo ""
     echo "Optional parameters:"
-    echo "  --cutoff <value>      Cutoff value for p-value (default: 0.01)"
-    echo "  --prefix <prefix>     Output prefix (path will be created if needed; default: Sig-Dp)"
+    echo "  --cutoff <value>      Cutoff value for p-value (default: 0.01, after Bonferroni correction)"
+    echo "  --prefix <prefix>     Output prefix (path will be created if needed; default: D-step/Sig-D)"
 	echo ""
 	echo "Output:"
 	echo "  For each tree in treelist, generates prefix-Tree*-triples.txt containing"
@@ -23,7 +23,7 @@ usage() {
 # default values
 FILTER_COL="p-value"
 CUTOFF="0.01"
-PREFIX="D-sig"
+PREFIX="D-step/Sig-D"
 
 if [[ $# -eq 0 ]]; then
     usage
@@ -129,14 +129,13 @@ N_SPECIES=${#SPECIES[@]}
 N_TRIPLES=$(( N_SPECIES * (N_SPECIES - 1) * (N_SPECIES - 2) / 6 ))
 
 
-NEW_CUTOFF=$(echo "$CUTOFF / $N_TRIPLES" | bc -l)
 echo "Starting analysis with parameters:"
 echo "  Fasta files: $FAS_DIR"
 echo "  IMAP file: $IMAP_FILE" 
 echo "  Tree list: $TREELIST_FILE"
 echo "  Output prefix: $PREFIX"
 echo "  Filter criteria: $FILTER_COL"
-echo "  Cutoff value: $CUTOFF ($(printf "%.4f" "$NEW_CUTOFF") after Bonferroni Correction)"
+echo "  Cutoff value: $CUTOFF"
 
 #Concatenate multi-locus FASTA
 
@@ -221,18 +220,24 @@ while IFS= read -r tree || [[ -n "$tree" ]]; do
     fi
     
     TREE_COUNT=$((TREE_COUNT + 1))
-    TREE_FILE="$PREFIX_DIR/Tree${TREE_COUNT}.txt"
+    TREE_FILE="$PREFIX-Tree${TREE_COUNT}.tree"
     CURRENT_PREFIX="${PREFIX}-Tree${TREE_COUNT}"
     
     echo "=================================================================="
     echo "Processing tree $TREE_COUNT..."
-    echo "Tree topology: $tree"
     
-    echo "$tree" > "$TREE_FILE"
+    if_tree=$(echo "$tree" |nw_display -)
+	if [[ -n "$(echo "$if_tree" | tr -d '[:space:]')" ]]; then
+    	echo "Tree topology: $tree"
+		echo "$tree" > "$TREE_FILE"
+	else
+		echo "There is an issue with the format of '$tree'";
+		exit 1
+	fi
     
     # run Dsuite Dtrios
     echo "Running 'Dsuite Dtrios' for tree $TREE_COUNT..."
-    Dsuite Dtrios "$VCF_FILE" "$IMAP_FILE" --tree="$TREE_FILE" -o "$CURRENT_PREFIX" > /dev/null 2>&1
+    Dsuite Dtrios "$VCF_FILE" "$IMAP_FILE" -t "$TREE_FILE" -o "$CURRENT_PREFIX" > /dev/null 2>&1
     
     if [[ $? -ne 0 ]]; then
         echo "Error: Dsuite Dtrios failed for tree $TREE_COUNT"
@@ -249,13 +254,13 @@ while IFS= read -r tree || [[ -n "$tree" ]]; do
     fi
     
     # process D file
-    OUTPUT_FILE="${CURRENT_PREFIX}-triples.txt"
+    OUTPUT_FILE="${CURRENT_PREFIX}.sig-triples"
 	TEMP_FILE="temp_filtered_${RANDOM}.txt"
     
-    echo "Calculating Dp and filtering results (${FILTER_COL} <= ($(printf "%.4f" "$NEW_CUTOFF"))..."
+    echo "Calculating Dp and filtering results (${FILTER_COL} <= $CUTOFF)..."
     
     # calculate Dp-value and filter non-sig triples
-    awk -v filter_col="$FILTER_COL" -v cutoff="$NEW_CUTOFF" '
+    awk -v filter_col="$FILTER_COL" -v cutoff="$CUTOFF" -v N_TRIPLES="$N_TRIPLES" '
     BEGIN {
         OFS = "\t"
         p1_idx = 1; p2_idx = 2; p3_idx = 3; dstat_idx = 4; zscore_idx = 5; pval_idx = 6
@@ -275,7 +280,7 @@ while IFS= read -r tree || [[ -n "$tree" ]]; do
             if ($i == "ABBA") ABBA_idx = i
             if ($i == "BABA") BABA_idx = i
         }
-        print header, "Dp"
+        print header, "Dp", "adjusted_p_value"
         next
     }
     {
@@ -291,9 +296,9 @@ while IFS= read -r tree || [[ -n "$tree" ]]; do
                 print $0, Dp
             }
         } else if (filter_col == "p-value") {
-            pval = $pval_idx
+            pval = $pval_idx * N_TRIPLES
             if (pval <= cutoff) {
-                print $0, Dp
+                print $0, Dp, pval 
             }
         }
     }' "$D_FILE" > "$TEMP_FILE"
@@ -308,6 +313,10 @@ while IFS= read -r tree || [[ -n "$tree" ]]; do
     tail -n+2 "$TEMP_FILE" | sort -t$'\t' -k11,11nr >> "$OUTPUT_FILE"
     
 	rm -f "$TEMP_FILE"
+	rm -f "${CURRENT_PREFIX}_BBAA"*
+	rm -f "${CURRENT_PREFIX}_combine"*
+	rm -f "${CURRENT_PREFIX}_Dmin"*
+	rm -f "${CURRENT_PREFIX}_tree.txt"
     
     RESULT_COUNT=$(tail -n+2 "$OUTPUT_FILE" | wc -l)
     echo "Filtered results for tree $TREE_COUNT: $RESULT_COUNT trios passed the filter"
