@@ -45,7 +45,7 @@ cd newick_utils
 make
 ```
 
-### d. Set executable paths in your shell  
+### e. Set executable paths in your shell  
 
 For convenience, you can add the paths to BPP, Dsuite, and SNP-sites to your shell environment.
 Edit your ~/.bashrc and add:
@@ -65,84 +65,499 @@ Then reload your shell configuration:
 source ~/.bashrc  
 ```
 
-## 1. The *D*-statictic within D-BPP workflow  
+## 1. Prepare Input Files
+### a. Genetic Data Files
+**Option 1: FASTA Files** (Recommended, for both D and BPP analysis)
+- One FASTA file per locus
+- **File naming convention**: Must end with `.fa`, `.fas`, or `.fasta`
+  - Example: `locus1.fasta`, `locus2.fas`, `chromosome5.fa`
+- Each FASTA file must contain:
+  - All samples (including outgroup)
+  - Aligned sequences for the same locus
+  
+**Option 2: VCF File** (Only for D analysis)
+- A single VCF file containing all loci and samples
+- Must include an outgroup sample
 
-We provide a shell script that runs Dsuite for each candidate species tree (supplied by the user in a tree-list file) and reports significant triples ranked by *D<sub>p</sub>*.
+**Option 3: Phylip File** (Only for BPP analysis)
+- A phylip file containing all loci and samples
+- Deleting the outgroup sample
+- The sequence name should be separated from the sequence by a line break or by at least two spaces
 
+### b. Imap File (Sample-Species Mapping)
+**Format**: Tab-separated values (TSV)
+**Requirements**:
+- One line per sample
+- First column: Sample ID (must match FASTA/VCF/PHYLIP headers)
+- Second column: Species ID
+- **Critical**: Outgroup samples must have species ID exactly as `"Outgroup"` (case-sensitive)
+- No header line
 
+Example `Test.imap`:
 ```
+a1  A
+a2  A
+b1  B
+b2  B
+c1  C
+c2  C
+d1  D
+d2  D
+e1  E
+e2  E
+f1  Outgroup
+```
+### c. TreeList File (Candidate Phylogenies)
+**Format**: One Newick tree per line
+**Requirements**:
+- One candidate tree per line
+- **Exclude outgroup** from all trees
+- Tree tips must match species IDs from Imap file
+- End each tree with semicolon
+
+Example `Test.treelist`:
+```
+(((A,B),C),(D,E));
+((A,(B,C)),(D,E));
+```
+
+
+## 2. The *D*-analysis within D-BPP workflow  
+
+We provide a shell script that runs Dsuite for each candidate species tree and reports significant triples ranked by *D<sub>p</sub>*.
+
+
+### a. Usage
+```bash
 Usage: bash D-step.sh (--fasta_dir <fasta_dir> |--vcf_file <vcf_file>) --imap <imap_file> --treelist <treelist_file> [--prefix <output_prefix>] [--cutoff <value>]
 
 Required parameters (choose one input type):
-  --fasta_dir <dir>     Directory containing locus FASTA files
+  --fasta_dir <dir>     Directory containing locus FASTA files (.fa, .fas, .fasta)
   --vcf_file <file>     VCF file
 Other Required parameters:
-  --imap <file>         Individual to species mapping file <sample_name>TAB<species_name>
+  --imap <file>         Individual to species mapping file
   --treelist <file>     File containing multiple trees (one per line)
 
 Optional parameters:
-  --cutoff <value>      Cutoff value for p-value (default: 0.01)
-  --prefix <prefix>     Output prefix (path will be created if needed; default: Sig-Dp)
-
-Output:
-  For each tree in treelist, generates prefix-Tree*-triples.txt containing all significant triples (after Bonferroni correction) sorted by 𝐷𝑝 value in descending order
-
+  --cutoff <value>      Cutoff value for p-value (default: 0.01, after Bonferroni correction)
+  --prefix <prefix>     Output prefix (path will be created if needed; default: ./Sig-D)
 ```
 
 
-## 2. The BPP analysis within D-BPP workflow  
+### b. Output Files
 
-### a. Prepare for control file
-The script can automatically generates first-round BPP control files implementing our three-model comparison of introgression (inflow, outflow, and ghost).  
+For each candidate tree in the treelist file, the script generates **two output files**:
 
-To date, the current implementation does not yet cover the complete D-BPP workflow, but we will continue to update BPP-step.sh to enable iterative refinement—generating updated BPP control files based on previous BPP results—until all significant triples are fully explained and a final comprehensive introgression model is obtained.
+#### Naming Convention:
+Output files follow this pattern:  
+`{prefix}-Tree{N}.tree` and `{prefix}-Tree{N}.sig-triples`  
+where `{N}` is the tree number (1-indexed) from the treelist.
 
+| File Type | Extension | Description |
+|-----------|-----------|-------------|
+| **Tree file** | `.tree` | Contains the original candidate tree from treelist |
+| **Significant triples file** | `.sig-triples` | Contains statistically significant triple results from Dsuite analysis |
+
+#### `.sig-triples` File Format
+The `.sig-triples` file is a **tab-delimited** table with the following columns:
+
+| Column | Description |
+|--------|-------------|
+| **P1, P2, P3** | Population triple in `((P1,P2),P3)` configuration |
+| **Dstatistic** | D-statistic value (ABBA-BABA test statistic) |
+| **Z-score** | Z-score for D-statistic significance |
+| **p-value** | Raw p-value (uncorrected) |
+| **f4-ratio** | f4-ratio value |
+| **BBAA** | BBAA pattern count |
+| **ABBA** | ABBA pattern count |
+| **BABA** | BABA pattern count |
+| **Dp** | *D<sub>p</sub>* value (proportion of ABBA sites) |
+| **adjusted_p_value** | Bonferroni-corrected p-value |
+
+
+### c. Example Run
+
+```bash
+bash D-step.sh --vcf_file Test.vcf --imap Test.imap --treelist Test.treelist --prefix D-step/Sig-D --cutoff 0.05
+```
+
+This command creates a new directory `D-step` containing:
 
 ```
-Usage: bash BPP-step.sh (--fasta_dir <fasta_directory> | --phylip_file <phylip_file>) --imap <imap_file> --tree <tree_file> --dstat <dstat_file> --prefix <output_prefix>
+D-step/
+├── Sig-D-Tree1.tree          # Tree 1 from treelist
+├── Sig-D-Tree1.sig-triples   # Significant triples for Tree 1
+├── Sig-D-Tree2.tree          # Tree 2 from treelist
+└── Sig-D-Tree2.sig-triples   # Significant triples for Tree 2
+```
+
+File `D-step/Sig-D-Tree1.tree`:
+```
+(((A,B),C),(D,E));
+```
+
+File `D-step/Sig-D-Tree1.sig-triples`:
+```
+P1      P2      P3      Dstatistic      Z-score p-value f4-ratio        BBAA    ABBA    BABA    Dp      adjusted_p_value
+E       D       C       0.763102        22.0933 2.3e-16 0.182623        16650.8 6610.75 888.25  0.236958        2.3e-15
+A       C       D       0.659949        28.4758 2.3e-16 0.145323        11808.8 5302.5  1086.25 0.231693        2.3e-15
+B       C       D       0.656888        26.6246 2.3e-16 0.142855        11981.5 5210.5  1079    0.226123        2.3e-15
+E       D       B       0.719196        39.0076 2.3e-16 0.104324        18435.8 4264.25 696.5   0.15249 2.3e-15
+E       D       A       0.706062        40.9373 2.3e-16 0.102908        18449.8 4193.5  722.5   0.14855 2.3e-15
+A       C       E       0.499905        18.3304 2.3e-16 0.0585972       15176.2 2947.5  982.75  0.102832        2.3e-15
+B       C       E       0.512875        18.7429 2.3e-16 0.0589314       15409   2915.5  938.75  0.102618        2.3e-15
+A       B       C       0.145487        4.10799 3.99112e-05     0.0138665       9752.75 1042.25 777.5   0.0228775       0.000399112
+```
+
+## 3. The BPP analysis within D-BPP workflow  
+
+### a. Usage
+The script can automatically generate the BPP control file implementing our three-model comparison of introgression (inflow, outflow, and ghost).  
+
+```
+Usage: bash ../BPP-step.sh (--fasta_dir <fasta_directory> | --phylip_file <phylip_file>) --imap <imap_file> --tree <tree_file> --dstat <dstat_file> --prefix <output_prefix>
 
 Required parameters (choose one input type):
-  --fasta_dir <dir>     Directory containing locus FASTA files
-  --phylip_file <file>  Existing BPP-PHYLIP file
+  --fasta_dir <dir>     Directory containing locus FASTA files (.fa, .fas, .fasta)
+  --phylip_file <file>  BPP-PHYLIP file (user-prepared, or generated from previous BPP-step.sh run)
 
 Other required parameters:
   --imap <file>         Individual to species mapping file (tab-delimited)
-  --tree <file>         Species tree file
-  --dstat <file>        D-statistic results file
-  --prefix <prefix>     Output prefix for BPP files
+  --tree <file>         Species tree file: output *tree file from D-step.sh
+  --dstat <file>        D-statistic results file: output *sig-triples file from D-step.sh
+  --prefix <prefix>     Output prefix for BPP files (assign unique names for each BPP analysis round, e.g., BPP-step/Sig-BPP-step1, BPP-step/Sig-BPP-step2...)
 
 Optional parameters:
+  --last_step           Output prefix from the last step, for identifying the BPP output files
+  --eps                 epsilon value for calculating the B10 value (Default: 0.001; only with --last_step)
+  --b10_cutoff          B10 cutoff for significant introgressions in BPP analysis (Default: 100; only with --last_step)
   --skip_validation     Skip PHYLIP file format validation (only with --phylip_file)
-```
-### b. run BPP
-```
-bpp -cfile bpp.ctl
+  --fbranch             Implement the fbranch rule for the consideration of ancestral gene flow
+
+############## Usage ############
+First step:
+	bash ../BPP-step.sh (--fasta_dir <fasta_directory> | --phylip_file <phylip_file>) --imap <imap_file> --tree <tree_file> --dstat <dstat_file> --prefix <output_prefix> [--fbranch]
+Subsequent steps:
+	bash ../BPP-step.sh --phylip_file <phylip_file> --imap <imap_file> --tree <tree_file> --dstat <dstat_file> --prefix <output_prefix>  --last_step <output_prefix_of_last_step> --skip_validation  [--fbranch] [--eps <epsilon_value>] [--b10_cutoff <b10_cutoff_value>]
+
+############# Example ###########
+bash ../BPP-step.sh --fasta_dir ./fasta_dir/ --imap test.imap --tree D-step/Sig-D-Tree1.tree --dstat D-step/Sig-D-Tree1.sig-triples --prefix BPP-step/Sig-BPP-step1 2> BPP-step/Sig-BPP-step1.log
+bash ../BPP-step.sh --phylip_file BPP-step/BPP.phy --imap test.imap --tree D-step/D-step-Tree1.tree --dstat D-step/D-step-Tree1.sig-triples --prefix BPP-step/Sig-BPP-step2 --last_step BPP-step/Sig-BPP-step1 --skip_validation 2>BPP-step/Sig-BPP-step2.log
 ```
 
-## c. Summarize *B*<sub>10 
- **a. Compute ​from posterior samples**
- For a table where each phi* column contains posterior samples, compute *B*<sub>10</sub> with the default cutoff *ε*=0.01 :
- ```
-python cal_b10.py posterior.txt B10_summary.txt
+### b. First Round Analysis
+**Command:**
+```bash
+bash BPP-step.sh (--fasta_dir <fasta_directory> | --phylip_file <phylip_file>) \
+  --imap <imap_file> \
+  --tree <tree_file> \
+  --dstat <dstat_file> \
+  --prefix <output_prefix>
 ```
 
-## d. Marginal likelihood
-**d1. run with BFdriver (thermodynamic integration)**
+**Key Parameters:**
+- `--tree` and `--dstat`: Use the corresponding output files from `D-step.sh` for a specific candidate tree
+- `*.tree`: Tree file containing the species phylogeny
+- `*.sig-triples`: Significant triple results from Dsuite analysis
+
+
+**Output Files Generated:**
+In the `--prefix` specified directory, the script generates 5 essential files:
+
+| File | Description | Generated When |
+|------|-------------|----------------|
+| 1. `BPP.phy` | PHYLIP format alignment file for BPP | Only with `--fasta_dir` (not with `--phylip_file`) |
+| 2. `*.introgression` | Records introgression events to be tested in this BPP-analysis round | Always |
+| 3. `*.msci` | msci file for constructing introgression models (the command `bpp --msci-creat *.msci` can be used to generate a network model) | Always |
+| 4. `BPP.imap` | BPP imap file | Always |
+| 5. `*_control.ctl` | BPP control file | Always |
+
+**Example first run:**
+# Round 1: Generating the BPP ctl file for Round 1
+```bash
+bash BPP-step.sh --fasta_dir ./fasta_dir/ \
+  --imap Test.imap \
+  --tree D-step/Sig-D-Tree1.tree \
+  --dstat D-step/Sig-D-Tree1.sig-triples \
+  --prefix BPP-step/Sig-BPP-step1 2> BPP-step/Sig-BPP-step1.log
+```
+
+This command creates a new directory `BPP-step` containing:
+```
+BPP-step/
+├── BPP.phy                      # PHYLIP alignment (if --fasta_dir used)
+├── Sig-BPP-step1.introgression  # Introgression events to test
+├── Sig-BPP-step1.msci           # MSCI model specification
+├── BPP.imap                     # BPP-formatted imap file
+├── Sig-BPP-step1.ctl            # BPP control file
+└── Sig-BPP-step1.log            # log file recording analysis steps
+```
+
+The BPP-step/Sig-BPP-step1.log file:
+```
+=================================================
+Step 1: Reading IMAP file and identifying outgroup...
+Outgroup individuals: 1
+Ingroup species: A B C D E
+BPP imap file: BPP-step/BPP.imap
+
+=================================================
+Step 2: Processing or checking BPP PHYLIP file...
+PHYLIP file for BPP: BPP-step/BPP.phy
+Number of loci : 1000
+
+=================================================
+Step 3: Reading tree file...
+Tree topology: (((A,B)N1,C)N2,(D,E)N3)N4;
+
+=================================================
+Step 4: Reading D-statistic results...
+First triple to consider: E,D,C
+P1_branch: E
+P2_branch: D
+P3_branch: C
+New introgressions to be tested: ghost->E, D->C C->D
+
+=================================================
+Step 5: Generating BPP control file template...
+The backcone tree including ghost lineages: (Ghost1,(((A,B)N1,C)N2,(D,E)N3)N4)N5;
+
+All tested introgressions in the present step:
+hybridization: N5/Ghost1-->N3/E
+bidirection: N3/D<-->N2/C
+
+Control file for BPP: BPP-step/Sig-BPP-step1.ctl
+Note: Remember to edit the BPP-step/Sig-BPP-step1.ctl file and adjust the parameter settings: nloci, phase, Threads, thetaprior, tauprior, burnin, nsample!
+
+=================================================
+The next command: BPP --cfile BPP-step/Sig-BPP-step1.ctl
+```
+
+Then run BPP: 
+```bash
+bpp --cfile BPP-step/Sig-BPP-step1.ctl 
+```
+
+The directory `BPP-step` containing:
+```
+BPP-step/
+├── BPP.phy                      # PHYLIP alignment (if --fasta_dir used)
+├── Sig-BPP-step1.introgression  # Introgression events to test
+├── Sig-BPP-step1.msci           # MSCI model specification
+├── BPP.imap                     # BPP-formatted imap file
+├── Sig-BPP-step1.ctl            # BPP control file
+├── Sig-BPP-step1.log            # log file recording analysis steps
+├── Sig-BPP-step1.mcmc.txt       # BPP mcmc-sample output
+└── Sig-BPP-step1.txt            # BPP parameter estimation output
+```
+
+### c. Subsequent Rounds (≥2)
+**Use this for follow-up analyses after the first round.**
+
+**Command:**
+```bash
+bash BPP-step.sh --phylip_file <phylip_file> \
+  --imap <imap_file> \
+  --tree <tree_file> \
+  --dstat <dstat_file> \
+  --prefix <new_output_prefix> \
+  --last_step <output_prefix_of_last_step> \
+  --skip_validation \
+  [--eps <epsilon_value>] \
+  [--b10_cutoff <b10_cutoff_value>]
+```
+
+**Key Parameters:**
+- `--last_step`: **Critical** - Specifies the output prefix from the **last BPP-analysis round**. This allows the script to locate and analyze previous BPP output files.
+- `--skip_validation`: Skip the phylip format validation step; Recommended when using PHYLIP files generated by previous runs
+- `--eps` (optional): Epsilon value for B10 calculation (Default: 0.001)
+- `--b10_cutoff` (optional): Threshold for identifying significant introgression events (Default: 100)
+
+**Example second run**
+```bash
+# Round 2: Analyzing results from Round 1 and generating the BPP ctl file for Round 2
+bash BPP-step.sh --phylip_file BPP-step/BPP.phy \
+  --imap test.imap \
+  --tree D-step/D-step-Tree1.tree \
+  --dstat D-step/D-step-Tree1.sig-triples \
+  --prefix BPP-step/Sig-BPP-step2 \
+  --last_step BPP-step/Sig-BPP-step1 \
+  --skip_validation \
+  --eps 0.001 \
+  --b10_cutoff 100 2>BPP-step/Sig-BPP-step2.log
+
+bpp --cfile BPP-step/Sig-BPP-step2.ctl 
+```
+
+This two commands creates 5 new files in the directory `BPP-step`:
+```
+BPP-step/
+├── Sig-BPP-step2.introgression  # Introgression events to test
+├── Sig-BPP-step2.msci           # MSCI model specification
+├── Sig-BPP-step2.ctl            # BPP control file
+├── Sig-BPP-step2.log            # log file recording analysis steps
+├── Sig-BPP-step2.mcmc.txt       # BPP mcmc-sample output
+└── Sig-BPP-step2.txt            # BPP parameter estimation output
+```
+
+The BPP-step/Sig-BPP-step2.log file:
+```
+=================================================
+Step 1: Reading IMAP file and identifying outgroup...
+Outgroup individuals: 1
+Ingroup species: A B C D E
+BPP imap file: BPP-step/BPP.imap
+
+=================================================
+Step 2: Processing or checking BPP PHYLIP file...
+PHYLIP file for BPP: BPP-step/BPP.phy
+Number of loci : 1000
+
+=================================================
+Step 3: Reading tree file...
+Tree topology: (((A,B)N1,C)N2,(D,E)N3)N4;
+
+=================================================
+Step 4: Reading BPP output files in the last step...
+Tree including ghost lineages: (Ghost1,(((A,B)N1,C)N2,(D,E)N3)N4)N5;
+Supported introgression events in the last step:
+Z3<-Z4(N3/D<--N2/C)            B10:INF       
+Z2<-Z1(N3/E<--N5/Ghost1)       B10:INF       
+Z4<-Z3(N2/C<--N3/D)            B10:INF       
+
+=================================================
+Step 5: Reading D-statistic results...
+Skip explained triples:
+E,D,C
+A,C,D
+B,C,D
+E,D,B
+E,D,A
+A,C,E
+B,C,E
+
+Next triple to consider: A,B,C
+P1_branch: A
+P2_branch: B
+P3_branch: C
+New introgressions to be tested: ghost->A, B->C C->B
+
+=================================================
+Step 6: Generating BPP control file template...
+The backcone tree including ghost lineages: (Ghost1,((Ghost2,((A,B)N1,C)N2)N6,(D,E)N3)N4)N5;
+
+All tested introgressions in the present step:
+bidirection: N3/D<-->N2/C
+hybridization: N5/Ghost1-->N3/E
+hybridization: N6/Ghost2-->N1/A
+bidirection: N1/B<-->N2/C
+
+Warning: multiple introgression edges involve the tree edge N2/C, please check and adjust the BPP-step/Sig-BPP-step2.msci and BPP-step/Sig-BPP-step2.introgression
+
+Control file for BPP: BPP-step/Sig-BPP-step2.ctl
+Note: Remember to edit the BPP-step/Sig-BPP-step2.ctl file and adjust the parameter settings: nloci, phase, Threads, thetaprior, tauprior, burnin, nsample!
+
+=================================================
+The next command: BPP --cfile BPP-step/Sig-BPP-step2.ctl
+```
+
+**Example third run**
+```bash
+# Round 3: Analyzing results from Round 2 and generating the BPP ctl file for Round 3
+bash BPP-step.sh --phylip_file BPP-step/BPP.phy \
+  --imap BPP.imap \
+  --tree D-step/D-step-Tree1.tree \
+  --dstat D-step/D-step-Tree1.sig-triples \
+  --prefix BPP-step/Sig-BPP-step1 \
+  --last_step BPP-step/Sig-BPP-step2 \
+  --skip_validation \
+  --eps 0.001 \
+  --b10_cutoff 100 2>BPP-step/Sig-BPP-step3.log
+BPP --cfile BPP-step/Sig-BPP-step3.ctl
+```
+
+This command creates 3 files in the directory `BPP-step`:
+```
+BPP-step/
+├── Sig-BPP-step3.msci           # MSCI model specification
+├── Sig-BPP-step3.ctl            # BPP control file
+├── Sig-BPP-step3.mcmc.txt       # BPP mcmc-sample output
+└── Sig-BPP-step3.txt            # BPP parameter estimation output
+└── Sig-BPP-step3.log            # log file recording analysis steps
+```
+
+The BPP-step/Sig-BPP-step3.log file:
+```
+=================================================
+Step 1: Reading IMAP file and identifying outgroup...
+Outgroup individuals: 1
+Ingroup species: A B C D E
+BPP imap file: BPP-step/BPP.imap
+
+=================================================
+Step 2: Processing or checking BPP PHYLIP file...
+PHYLIP file for BPP: BPP-step/BPP.phy
+Number of loci : 1000
+
+=================================================
+Step 3: Reading tree file...
+Tree topology: (((A,B)N1,C)N2,(D,E)N3)N4;
+
+=================================================
+Step 4: Reading BPP output files in the last step...
+Tree including ghost lineages: (Ghost1,((Ghost2,((A,B)N1,C)N2)N6,(D,E)N3)N4)N5;
+Supported introgression events in the last step:
+Z4<-Z3(N3/E<--N5/Ghost1)       B10:INF       
+Z6<-Z5(N1/A<--N6/Ghost2)       B10:INF       
+Z1<-Z2(N3/D<--N2/C)            B10:INF       
+Z2<-Z1(N2/C<--N3/D)            B10:INF       
+
+=================================================
+Step 5: Reading D-statistic results...
+Skip explained triples:
+E,D,C
+A,C,D
+B,C,D
+E,D,B
+E,D,A
+A,C,E
+B,C,E
+A,B,C
+Success! All significant triples in D-analysis have been fully explained by the supported introgression events in the last step
+
+=================================================
+The final introgression model contains the following introgression events:
+bidirection: N3/D<-->N2/C
+hybridization: N5/Ghost1-->N3/E
+hybridization: N6/Ghost2-->N1/A
+
+Control file for BPP: BPP-step/Sig-BPP-step3.ctl
+Note: Remember to edit the BPP-step/Sig-BPP-step3.ctl file and adjust the parameter settings: nloci, phase, Threads, thetaprior, tauprior, burnin, nsample!
+
+=================================================
+The next command: BPP --cfile BPP-step/Sig-BPP-step3.ctl
+```
+
+**Finally introgression model**
+Continue until the log file show "Success! All significant triples in D-analysis have been fully explained...", which means the final introgression model have been generated.
+
+
+## 4. Marginal likelihood Calculation
+### a. Run with BFdriver (thermodynamic integration)
 
 ```
 #!/bin/bash
 bpp --bfdriver input.ctl --points 16 && \
 for i in {1..16}; do sed -i "s/name\.job/-$i.job/g" "input.ctl.$i"; done && \
-for i in {1..16}; do nohup bpp -cfile "input.ctl.$i" & done
+for i in {1..16}; do nohup bpp --cfile "input.ctl.$i" & done
 ```
 
-**d2. Compute log marginal likelihood**
+### b. Compute log marginal likelihood
 ```
 python cal_marginal_likelihoods.py model.betaweights.csv "*.out.*" LNK.txt
-# prints the weighted sum and writes results/model_lnK.txt
+# printing the weighted sum and writes results/model_lnK.txt
 ```
 
- 
 
 
 
