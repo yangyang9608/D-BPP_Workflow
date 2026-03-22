@@ -6,7 +6,7 @@
 This document provides a detailed, step-by-step guide for running the D-BPP pipeline, from raw data preparation to the final inference of phylogenetic networks and ghost introgression.
 
 
-## Notes and limitations
+## Notes
 
 This pipeline is primarily intended for datasets with fewer than 10 taxa. It is designed as a computational aid to facilitate model setup and preliminary exploration, rather than as a fully automated framework for determining the best biological scenario in every case.
 
