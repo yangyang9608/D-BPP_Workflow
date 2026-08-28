@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Check shell syntax
+        run: bash -n D-step.sh BPP-step.sh
+
+      - name: Compile Python utilities
+        run: python -m py_compile cal_b10.py cal_marginal_likelihoods.py
+
+      - name: Run tests
+        run: python -m unittest discover -s tests -v

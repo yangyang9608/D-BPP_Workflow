@@ -1,7 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # By: Xiao-xu Pang, 2025-12-6
 
+set -o pipefail
+
 usage() {
+    local status="${1:-1}"
     echo "Usage: bash $0 (--fasta_dir <fasta_directory> | --phylip_file <phylip_file>) --imap <imap_file> --tree <tree_file> --dstat <dstat_file> --prefix <output_prefix>"
     echo ""
 	echo "Required parameters (choose one input type):"
@@ -29,12 +32,29 @@ usage() {
 	echo ""
 	echo "############# Example ###########"
 	echo "bash $0 --fasta_dir ./fasta_dir/ --imap test.imap --tree D-step/Sig-D-Tree1.tree --dstat D-step/Sig-D-Tree1.sig-triples --prefix BPP-step/Sig-BPP-step1 2> BPP-step/Sig-BPP-step1.log"
-	echo "bash $0 --phylip_file BPP-step/BPP.phy --imap test.imap --tree D-step/D-step-Tree1.tree --dstat D-step/D-step-Tree1.sig-triples --prefix BPP-step/Sig-BPP-step2 --last_step BPP-step/Sig-BPP-step1 --skip_validation 2>BPP-step/Sig-BPP-step2.log"
+	echo "bash $0 --phylip_file BPP-step/BPP.phy --imap test.imap --tree D-step/Sig-D-Tree1.tree --dstat D-step/Sig-D-Tree1.sig-triples --prefix BPP-step/Sig-BPP-step2 --last_step BPP-step/Sig-BPP-step1 --skip_validation 2>BPP-step/Sig-BPP-step2.log"
+    exit "$status"
+}
+
+die() {
+    echo "ERROR: $*" >&2
     exit 1
 }
 
+require_value() {
+    local option="$1"
+    local value="${2-}"
+    if [[ -z "$value" || "$value" == --* ]]; then
+        die "$option requires a value"
+    fi
+}
+
+require_command() {
+    command -v "$1" >/dev/null 2>&1 || die "Required command '$1' was not found in PATH"
+}
+
 if [[ $# -eq 0 ]]; then
-    usage
+    usage 1
 fi
 
 SKIP_VALIDATION=false
@@ -44,38 +64,53 @@ B10_CUTOFF=100
 while [[ $# -gt 0 ]]; do
     case $1 in
         --fasta_dir)
+            require_value "$1" "${2-}"
             FASTA_DIR="$2"
             shift 2
             ;;
         --phylip_file)
+            require_value "$1" "${2-}"
             PHYLIP_FILE="$2"
             shift 2
             ;;
         --imap)
+            require_value "$1" "${2-}"
             IMAP_FILE="$2"
             shift 2
             ;;
         --tree)
+            require_value "$1" "${2-}"
             TREE_FILE="$2"
             shift 2
             ;;
         --dstat)
+            require_value "$1" "${2-}"
             DSTAT_FILE="$2"
             shift 2
             ;;
         --prefix)
+            require_value "$1" "${2-}"
             PREFIX="$2"
             shift 2
             ;;
 		--last_step)
+			require_value "$1" "${2-}"
 			LAST_STEP="$2"
 			shift 2
 			;;
-		--esp)
+		--eps)
+			require_value "$1" "${2-}"
 			EPS="$2"
 			shift 2
 			;;
+		--esp)
+			require_value "$1" "${2-}"
+			EPS="$2"
+			echo "WARNING: --esp is deprecated; use --eps" >&2
+			shift 2
+			;;
 		--b10_cutoff)
+			require_value "$1" "${2-}"
 			B10_CUTOFF="$2"
 			shift 2
 			;;
@@ -88,11 +123,11 @@ while [[ $# -gt 0 ]]; do
 			shift
 			;;
         -h|--help)
-            usage
+            usage 0
             ;;
         *)
             echo "Unknown option: $1" >&2
-            usage
+            usage 1
             ;;
     esac
 done
@@ -100,38 +135,34 @@ done
 #====================check input files==========================
 if [[ -n "$FASTA_DIR" && -n "$PHYLIP_FILE" ]]; then
     echo "ERROR: Cannot specify both --fasta_dir and --phylip_file" >&2
-    usage
+    usage 1
 elif [[ -z "$FASTA_DIR" && -z "$PHYLIP_FILE" ]]; then
     echo "ERROR: Must specify either --fasta_dir or --phylip_file" >&2
-    usage
+    usage 1
 elif [[ -n "$FASTA_DIR" && ! -d "$FASTA_DIR" ]]; then
-    echo "ERROR: FASTA directory $FASTA_DIR does not exist!" >&2
-    exit 1
+    die "FASTA directory '$FASTA_DIR' does not exist"
 elif [[ -n "$PHYLIP_FILE" && ! -f "$PHYLIP_FILE" ]]; then
-    echo "ERROR: PHYLIP file $PHYLIP_FILE does not exist!" >&2
-    exit 1
+    die "PHYLIP file '$PHYLIP_FILE' does not exist"
 fi
 
 if [[ "$SKIP_VALIDATION" == true && -z "$PHYLIP_FILE" ]]; then
     echo "ERROR: --skip_validation can only be used with --phylip_file" >&2
-    usage
+    usage 1
 fi
 if [[ -z "$IMAP_FILE" || -z "$TREE_FILE" || -z "$DSTAT_FILE" || -z "$PREFIX" ]]; then
     echo "ERROR: Missing required parameters!" >&2
-    usage
+    usage 1
 fi
 
 for file in "$IMAP_FILE" "$TREE_FILE" "$DSTAT_FILE"; do
     if [[ ! -f "$file" ]]; then
-        echo "ERROR: Input file $file does not exist!" >&2
-        exit 1
+        die "Input file '$file' does not exist"
     fi
 done
 
 if [[ -n "${LAST_STEP+x}" ]]; then
     if [[ -z "$LAST_STEP" ]]; then
-        echo "ERROR: Missing LAST_STEP parameter" >&2
-        exit 1
+        die "Missing --last_step value"
     fi
     if [[ ! -f "${LAST_STEP}.introgression" ]] || [[ ! -f "${LAST_STEP}.mcmc.txt" ]]; then
         echo "ERROR: Required files not found:" >&2
@@ -143,11 +174,24 @@ if [[ -n "${LAST_STEP+x}" ]]; then
 	MCMC_FILE=${LAST_STEP}.mcmc.txt
 fi
 
-PREFIX_DIR=$(dirname "$PREFIX")
-if [[ ! -d "$PREFIX_DIR" ]]; then
-    echo "Creating directory: $PREFIX_DIR" >&2
-    mkdir -p "$PREFIX_DIR"
+if ! [[ "$EPS" =~ ^[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; then
+    die "--eps must be numeric (received '$EPS')"
 fi
+awk -v value="$EPS" 'BEGIN { exit !(value > 0 && value < 1) }' || \
+    die "--eps must be greater than 0 and less than 1 (received '$EPS')"
+
+if ! [[ "$B10_CUTOFF" =~ ^[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; then
+    die "--b10_cutoff must be numeric (received '$B10_CUTOFF')"
+fi
+awk -v value="$B10_CUTOFF" 'BEGIN { exit !(value > 0) }' || \
+    die "--b10_cutoff must be greater than 0 (received '$B10_CUTOFF')"
+
+for command_name in bpp nw_display nw_clade nw_labels nw_prune perl; do
+    require_command "$command_name"
+done
+
+PREFIX_DIR=$(dirname "$PREFIX")
+mkdir -p "$PREFIX_DIR" || die "Failed to create output directory '$PREFIX_DIR'"
 
 
 step=1
@@ -157,29 +201,28 @@ echo "=================================================" >&2
 echo "Step $step: Reading IMAP file and identifying outgroup..." >&2
 declare -A INDIV_TO_SPECIES
 declare -A SPECIES_INDIVS
+declare -A SEEN_SPECIES
+declare -a SPECIES_ORDER
 OUTGROUP_INDS=()
 IMAP_BPP="${PREFIX_DIR}/BPP.imap"
 
-SKIP_IMAP=0
-[[ -n "$LAST_STEP"  && -f "$IMAP_BPP" ]] && SKIP_IMAP=1
-[[ $SKIP_IMAP -eq 0 ]] && > "$IMAP_BPP"
-
 > "$IMAP_BPP"
-
-while IFS=$'\t' read -r individual species || [[ -n "$individual" ]]; do
-    if [[ -z "$individual" || "$individual" =~ ^# ]]; then
-        continue
-    fi
-    
-    individual=$(echo "$individual" | xargs)
-    species=$(echo "$species" | xargs)
-    
+IMAP_LINE=0
+while read -r individual species extra || [[ -n "$individual" ]]; do
+    ((IMAP_LINE++))
+    [[ -z "$individual" || "$individual" == \#* ]] && continue
+    [[ -n "$species" && -z "$extra" ]] || die "Malformed IMAP line $IMAP_LINE; expected exactly two whitespace-delimited columns"
+    [[ -z "${INDIV_TO_SPECIES[$individual]}" ]] || die "Duplicate individual '$individual' in IMAP file"
     INDIV_TO_SPECIES["$individual"]="$species"
-    
+
     if [[ "$species" == "Outgroup" ]]; then
         OUTGROUP_INDS+=("$individual")
     else
-		[[ $SKIP_IMAP -eq 0 ]] && echo -e "${individual}\t${species}" >> "$IMAP_BPP"
+		printf '%s\t%s\n' "$individual" "$species" >> "$IMAP_BPP"
+        if [[ -z "${SEEN_SPECIES[$species]}" ]]; then
+            SEEN_SPECIES["$species"]=1
+            SPECIES_ORDER+=("$species")
+        fi
         if [[ -z "${SPECIES_INDIVS[$species]}" ]]; then
             SPECIES_INDIVS["$species"]="$individual"
         else
@@ -188,8 +231,11 @@ while IFS=$'\t' read -r individual species || [[ -n "$individual" ]]; do
     fi
 done < "$IMAP_FILE"
 
+[[ ${#INDIV_TO_SPECIES[@]} -gt 0 ]] || die "IMAP file contains no samples"
+[[ ${#SPECIES_ORDER[@]} -ge 3 ]] || die "BPP-step requires at least three ingroup species"
+
 echo "Outgroup individuals: ${#OUTGROUP_INDS[@]}" >&2
-echo "Ingroup species: ${!SPECIES_INDIVS[@]}" >&2
+echo "Ingroup species: ${SPECIES_ORDER[*]}" >&2
 echo "BPP imap file: $IMAP_BPP" >&2
 ((step++))
 
@@ -207,58 +253,70 @@ if [[ -n "$FASTA_DIR" ]]; then
     
 	> "$SEQ_FILE"
 	
-	for fasta_file in "$FASTA_DIR"/*.fasta "$FASTA_DIR"/*.fa "$FASTA_DIR"/*.fas; do
-	    if [[ ! -f "$fasta_file" ]]; then
-	        continue
-	    fi
-	    
-	    declare -A SEQUENCES
-	    declare -A PROCESSED_INDIVS
-	    TOTAL_INGROUP_INDIVS=0
-	    SEQUENCE_LENGTH=0
+		FASTA_FILE_COUNT=0
+		for fasta_file in "$FASTA_DIR"/*.fasta "$FASTA_DIR"/*.fa "$FASTA_DIR"/*.fas; do
+		    if [[ ! -f "$fasta_file" ]]; then
+		        continue
+		    fi
+		    ((FASTA_FILE_COUNT++))
+
+		    declare -A SEQUENCES=()
+		    TOTAL_INGROUP_INDIVS=0
+		    SEQUENCE_LENGTH=0
 	    
 	    CURRENT_INDIV=""
 	    CURRENT_SEQ=""
 	    
-	    while IFS= read -r line || [[ -n "$line" ]]; do
-	        if [[ "$line" =~ ^\> ]]; then
-	            if [[ -n "$CURRENT_INDIV" && -n "$CURRENT_SEQ" ]]; then
-	                SEQUENCES["$CURRENT_INDIV"]="$CURRENT_SEQ"
-	                if [[ $SEQUENCE_LENGTH -eq 0 ]]; then
-	                    SEQUENCE_LENGTH=${#CURRENT_SEQ}
-	                fi
-	            fi
+		    while IFS= read -r line || [[ -n "$line" ]]; do
+		        if [[ "$line" =~ ^\> ]]; then
+		            if [[ -n "$CURRENT_INDIV" ]]; then
+		                [[ -n "$CURRENT_SEQ" ]] || die "Empty sequence for '$CURRENT_INDIV' in '$fasta_file'"
+		                [[ -z "${SEQUENCES[$CURRENT_INDIV]}" ]] || die "Duplicate FASTA identifier '$CURRENT_INDIV' in '$fasta_file'"
+		                SEQUENCES["$CURRENT_INDIV"]="$CURRENT_SEQ"
+		                if [[ $SEQUENCE_LENGTH -eq 0 ]]; then
+		                    SEQUENCE_LENGTH=${#CURRENT_SEQ}
+		                elif [[ ${#CURRENT_SEQ} -ne $SEQUENCE_LENGTH ]]; then
+		                    die "Sequences are not aligned to a common length in '$fasta_file'"
+		                fi
+		            fi
 	            
 	            CURRENT_INDIV="${line:1}"
-	            CURRENT_INDIV=$(echo "$CURRENT_INDIV" | awk '{print $1}')
-	            CURRENT_SEQ=""
-	        else
-	            CURRENT_SEQ="${CURRENT_SEQ}${line}"
-	        fi
-	    done < "$fasta_file"
-	    
-	    if [[ -n "$CURRENT_INDIV" && -n "$CURRENT_SEQ" ]]; then
-	        SEQUENCES["$CURRENT_INDIV"]="$CURRENT_SEQ"
-	        if [[ $SEQUENCE_LENGTH -eq 0 ]]; then
-	            SEQUENCE_LENGTH=${#CURRENT_SEQ}
-	        fi
-	    fi
-	    
-	    INGROUP_DATA=()
-	    for species in "${!SPECIES_INDIVS[@]}"; do
+		            CURRENT_INDIV="${CURRENT_INDIV%%[[:space:]]*}"
+		            [[ -n "$CURRENT_INDIV" ]] || die "Empty FASTA identifier in '$fasta_file'"
+		            CURRENT_SEQ=""
+		        elif [[ -n "$CURRENT_INDIV" ]]; then
+		            line=$(printf '%s' "$line" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+		            [[ "$line" =~ ^[ACGTRYSWKMBDHVN?*-]*$ ]] || die "Unsupported sequence character for '$CURRENT_INDIV' in '$fasta_file'"
+		            CURRENT_SEQ="${CURRENT_SEQ}${line}"
+		        fi
+		    done < "$fasta_file"
+
+		    if [[ -n "$CURRENT_INDIV" ]]; then
+		        [[ -n "$CURRENT_SEQ" ]] || die "Empty sequence for '$CURRENT_INDIV' in '$fasta_file'"
+		        [[ -z "${SEQUENCES[$CURRENT_INDIV]}" ]] || die "Duplicate FASTA identifier '$CURRENT_INDIV' in '$fasta_file'"
+		        SEQUENCES["$CURRENT_INDIV"]="$CURRENT_SEQ"
+		        if [[ $SEQUENCE_LENGTH -eq 0 ]]; then
+		            SEQUENCE_LENGTH=${#CURRENT_SEQ}
+		        elif [[ ${#CURRENT_SEQ} -ne $SEQUENCE_LENGTH ]]; then
+		            die "Sequences are not aligned to a common length in '$fasta_file'"
+		        fi
+		    fi
+
+		    INGROUP_DATA=()
+		    for species in "${SPECIES_ORDER[@]}"; do
 	        for individual in ${SPECIES_INDIVS["$species"]}; do
 	            if [[ -n "${SEQUENCES[$individual]}" ]]; then
 	                BPP_SEQ_NAME="${species}^${individual}"
 	                INGROUP_DATA+=("$BPP_SEQ_NAME" "${SEQUENCES[$individual]}")
-	                PROCESSED_INDIVS["$individual"]=1
-	                TOTAL_INGROUP_INDIVS=$((TOTAL_INGROUP_INDIVS + 1))
+		                TOTAL_INGROUP_INDIVS=$((TOTAL_INGROUP_INDIVS + 1))
 	            fi
 	        done
 	    done
 	    
-	    if [[ $TOTAL_INGROUP_INDIVS -lt 2 ]]; then
-	        echo "    ✗ SKIP - Only $TOTAL_INGROUP_INDIVS ingroup individual(s) found (minimum 2 required)" >&2 
-	        continue
+		    if [[ $TOTAL_INGROUP_INDIVS -lt 2 ]]; then
+		        echo "SKIP $(basename "$fasta_file"): only $TOTAL_INGROUP_INDIVS ingroup individual(s) found (minimum 2 required)" >&2
+		        unset SEQUENCES INGROUP_DATA
+		        continue
 	    fi
 	    
 	    {
@@ -269,59 +327,75 @@ if [[ -n "$FASTA_DIR" ]]; then
 	            SEQ_NAME="${INGROUP_DATA[i]}"
 	            SEQ_DATA="${INGROUP_DATA[i+1]}"
 	            
-	            printf "%-15s%s\n" "$SEQ_NAME" "$SEQ_DATA"
+		            printf "%s  %s\n" "$SEQ_NAME" "$SEQ_DATA"
 	        done
 	    } >> "$SEQ_FILE"
 	    
 	    LOCUS_COUNT=$((LOCUS_COUNT + 1))
 	    
 	    unset SEQUENCES
-	    unset PROCESSED_INDIVS
 	    unset INGROUP_DATA
-	done
-	echo "Phylip file for BPP: $SEQ_FILE" >&2
+		done
+		[[ $FASTA_FILE_COUNT -gt 0 ]] || die "No .fa, .fas, or .fasta files were found in '$FASTA_DIR'"
+		[[ $LOCUS_COUNT -gt 0 ]] || die "No FASTA locus contained at least two ingroup individuals"
+		echo "Phylip file for BPP: $SEQ_FILE" >&2
 else
     echo "PHYLIP file for BPP: $PHYLIP_FILE" >&2
     if [[ ! -s "$PHYLIP_FILE" ]]; then
-        echo "ERROR: PHYLIP file is empty!" >&2
-        exit 1
+        die "PHYLIP file '$PHYLIP_FILE' is empty"
     fi
-    LOCUS_COUNT=0
-    
-    while IFS= read -r line; do
-        # Skip empty lines and comment lines
-        if [[ -z "$line" || "$line" =~ ^# ]]; then
-            continue
-        fi
-        
-        # Check if this is a header line (starts with spaces/numbers)
-        if [[ "$line" =~ ^[[:space:]]*[0-9]+[[:space:]]+[0-9]+ ]]; then
-            # This is a locus header line
-            LOCUS_COUNT=$((LOCUS_COUNT + 1))
+    if [[ "$SKIP_VALIDATION" == true ]]; then
+        LOCUS_COUNT=$(awk '$0 ~ /^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]*$/ { count++ } END { print count + 0 }' "$PHYLIP_FILE")
+    else
+        LOCUS_COUNT=0
+        EXPECTED_SEQUENCES=0
+        EXPECTED_LENGTH=0
+        OBSERVED_SEQUENCES=0
+        declare -A SEEN_PHYLIP_NAMES=()
 
-        if [[ "$SKIP_VALIDATION" == true ]]; then
-			continue
-		fi 
-            
-        # Basic format validation: should contain sequence name and data
-		elif [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([ACGTNacgtn-]+) ]]; then
-			SEQ_NAME="${BASH_REMATCH[1]}"
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
 
-			if [[ ! "$SEQ_NAME" =~ ^[^^]+\^[^^]+$ ]]; then
-                echo "ERROR: Invalid sequence name format '$SEQ_NAME, Expected format: species^individual" >&2
-				exit
+            if [[ "$line" =~ ^[[:space:]]*([0-9]+)[[:space:]]+([0-9]+)[[:space:]]*$ ]]; then
+                if [[ $LOCUS_COUNT -gt 0 && $OBSERVED_SEQUENCES -ne $EXPECTED_SEQUENCES ]]; then
+                    die "PHYLIP locus $LOCUS_COUNT declares $EXPECTED_SEQUENCES sequences but contains $OBSERVED_SEQUENCES"
+                fi
+                ((LOCUS_COUNT++))
+                EXPECTED_SEQUENCES=${BASH_REMATCH[1]}
+                EXPECTED_LENGTH=${BASH_REMATCH[2]}
+                OBSERVED_SEQUENCES=0
+                SEEN_PHYLIP_NAMES=()
+                [[ $EXPECTED_SEQUENCES -ge 2 && $EXPECTED_LENGTH -gt 0 ]] || die "Invalid PHYLIP header for locus $LOCUS_COUNT"
+                continue
             fi
-			SPECIES_NAME="${SEQ_NAME%^*}"
-			INDIVIDUAL_NAME="${SEQ_NAME#*^}"
-			if [[ -z INDIV_TO_SPECIES["$INDIVIDUAL_NAME"] || ${INDIV_TO_SPECIES["$INDIVIDUAL_NAME"]} != "$SPECIES_NAME" ]]; then
-            	echo "ERROR: Invalid sequence name format '$SEQ_NAME: Individual '$INDIVIDUAL_NAME' not found in IMAP file, or '$INDIVIDUAL_NAME' does not match '$SPECIES_NAME'" >&2
-				exit
+
+            [[ $LOCUS_COUNT -gt 0 ]] || die "PHYLIP sequence encountered before the first locus header"
+            if [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([ACGTRYSWKMBDHVNacgtryswkmbdhvn?*-]+)[[:space:]]*$ ]]; then
+                SEQ_NAME="${BASH_REMATCH[1]}"
+                SEQ_DATA="${BASH_REMATCH[2]}"
+                [[ "$SEQ_NAME" =~ ^[^^]+\^[^^]+$ ]] || die "Invalid sequence name '$SEQ_NAME'; expected species^individual"
+                [[ -z "${SEEN_PHYLIP_NAMES[$SEQ_NAME]}" ]] || die "Duplicate sequence '$SEQ_NAME' in PHYLIP locus $LOCUS_COUNT"
+                [[ ${#SEQ_DATA} -eq $EXPECTED_LENGTH ]] || die "Sequence '$SEQ_NAME' in PHYLIP locus $LOCUS_COUNT has length ${#SEQ_DATA}; expected $EXPECTED_LENGTH"
+                SPECIES_NAME="${SEQ_NAME%^*}"
+                INDIVIDUAL_NAME="${SEQ_NAME#*^}"
+                if [[ -z "${INDIV_TO_SPECIES[$INDIVIDUAL_NAME]}" || "${INDIV_TO_SPECIES[$INDIVIDUAL_NAME]}" != "$SPECIES_NAME" ]]; then
+                    die "Sequence '$SEQ_NAME' does not match the IMAP assignment for '$INDIVIDUAL_NAME'"
+                fi
+                SEEN_PHYLIP_NAMES["$SEQ_NAME"]=1
+                ((OBSERVED_SEQUENCES++))
+                [[ $OBSERVED_SEQUENCES -le $EXPECTED_SEQUENCES ]] || die "PHYLIP locus $LOCUS_COUNT contains more sequences than declared"
+            else
+                die "Unrecognized PHYLIP line: '$line' (use --skip_validation only after validating the file independently)"
             fi
+        done < "$PHYLIP_FILE"
+
+        if [[ $LOCUS_COUNT -gt 0 && $OBSERVED_SEQUENCES -ne $EXPECTED_SEQUENCES ]]; then
+            die "PHYLIP locus $LOCUS_COUNT declares $EXPECTED_SEQUENCES sequences but contains $OBSERVED_SEQUENCES"
         fi
-        
-    done < "$PHYLIP_FILE"
+    fi
 	SEQ_FILE=$PHYLIP_FILE
 fi
+[[ $LOCUS_COUNT -gt 0 ]] || die "No PHYLIP locus headers were found"
 echo "Number of loci : $LOCUS_COUNT" >&2
 ((step++))
 
@@ -331,11 +405,10 @@ echo "" >&2
 echo "================================================="  >&2
 echo "Step $step: Reading tree file..." >&2
 if [[ -f "$TREE_FILE" ]]; then
-    TREE_CONTENT=$(cat "$TREE_FILE")
-	if_tree=$(echo "$TREE_CONTENT" |nw_display -)
-    if [[ -n "$(echo "$if_tree" | tr -d '[:space:]')" ]]; then
+	TREE_CONTENT=$(tr -d '[:space:]' < "$TREE_FILE")
+	if if_tree=$(printf '%s\n' "$TREE_CONTENT" | nw_display - 2>/dev/null) && [[ -n "$(printf '%s' "$if_tree" | tr -d '[:space:]')" ]]; then
 		# add inner-node labels
-		tree=$(echo "$TREE_CONTENT" | tr -d '[:space:]' | perl -pe 's/:[0-9.]*//g')
+		tree=$(printf '%s\n' "$TREE_CONTENT" | perl -pe 's/:-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?//g')
 		node_id=1
 		new_tree=""
 		i=0
@@ -358,11 +431,10 @@ if [[ -f "$TREE_FILE" ]]; then
 
     		((i++))
 		done
-    	echo "Tree topology: $new_tree" >&2
-    else
-        echo "There is an issue with the tree file: '$TREE_FILE'"; >&2
-        exit 1
-    fi  
+		echo "Tree topology: $new_tree" >&2
+	else
+		die "Invalid Newick tree in '$TREE_FILE'"
+	fi
 fi
 ((step++))
 
@@ -632,9 +704,13 @@ ctl_con() {
 	declare -g -A conflicting
 	declare -g -a warning
 	declare -g hybrid_id=0
+	msci_command=()
+	intr_log=()
+	conflicting=()
+	warning=()
 	#arrange introgression edges to the backbone tree
 	for key in "${adding_intro_sort[@]}"; do
-		[[ $key =~ ^(.+)/([^<]+)(<?)--\>(.+)/(.+)$ ]]
+		[[ $key =~ ^(.+)/([^<]+)(<?)--\>(.+)/(.+)$ ]] || die "Could not parse introgression edge '$key'"
 		n1=${BASH_REMATCH[1]}
 		n2=${BASH_REMATCH[2]}
 	    if_bi=${BASH_REMATCH[3]}
@@ -680,23 +756,36 @@ ctl_con() {
 tree $new_tree
 $merged_command
 EOF
-	MODEL=$(bpp --msci-creat $MSCI_FILE 2>&1 | sed -n '$p')
-	[[ $MODEL =~ ^Processing ]] && echo "There is error with $MSCI_FILE" >&2 && exit 1
-	PHASE=$(printf '0 %.0s' $(seq 1 $S) | sed 's/ $//')
-	
+	if ! MSCI_OUTPUT=$(bpp --msci-create "$MSCI_FILE" 2>&1); then
+		printf '%s\n' "$MSCI_OUTPUT" >&2
+		die "BPP could not construct an MSCI model from '$MSCI_FILE'"
+	fi
+	MODEL=$(printf '%s\n' "$MSCI_OUTPUT" | tail -n 1)
+	[[ -n "$MODEL" && ! "$MODEL" =~ ^Processing ]] || die "BPP did not return a valid MSCI model for '$MSCI_FILE'"
+
 	################generate ctl file##################
 	CTL_FILE="${PREFIX}.ctl"
-	list_ghosts=$(echo "$new_tree" | nw_labels - | grep -o -E '(Ghost)[0-9]+' |tr '\n' ' ' |sed 's/ $//')
-	num_ghosts=$(echo "$new_tree" | nw_labels - | grep -o -E '(Ghost)[0-9]+' |wc -l)
-	
-	declare -g S=$(( ${#SPECIES_INDIVS[@]} + $num_ghosts ))
-	line1="$S $list_ghosts"
-	line2=$(seq -s " " $num_ghosts |tr '0-9' '0')
-	for species in "${!SPECIES_INDIVS[@]}"; do
-	    line1="$line1 $species"
-	    indiv_count=$(echo "${SPECIES_INDIVS["$species"]}" | wc -w)
-	    line2="$line2 $indiv_count"
+	local -a GHOST_NAMES=()
+	mapfile -t GHOST_NAMES < <(printf '%s\n' "$new_tree" | nw_labels - | grep -o -E 'Ghost[0-9]+' | sort -Vu)
+	num_ghosts=${#GHOST_NAMES[@]}
+	declare -g S=$(( ${#SPECIES_ORDER[@]} + num_ghosts ))
+
+	declare -a ctl_species=("${GHOST_NAMES[@]}" "${SPECIES_ORDER[@]}")
+	declare -a sample_counts=()
+	declare -a phase_values=()
+	for ((i = 0; i < num_ghosts; i++)); do
+		sample_counts+=("0")
 	done
+	for species in "${SPECIES_ORDER[@]}"; do
+		indiv_count=$(wc -w <<< "${SPECIES_INDIVS[$species]}")
+		sample_counts+=("$indiv_count")
+	done
+	for ((i = 0; i < S; i++)); do
+		phase_values+=("0")
+	done
+	line1="$S ${ctl_species[*]}"
+	line2="${sample_counts[*]}"
+	PHASE="${phase_values[*]}"
 	
 	cat > "$CTL_FILE" << EOF
 	          seed =  -1
@@ -722,16 +811,16 @@ EOF
 	      finetune =  1
 	       *Threads = 8 19 1
 	         print = 1 0 0 0
-	        burnin = 100000 * Need to adjust according to according to your data size and the number of specified introgression events
+	        burnin = 100000 * Need to adjust according to your data size and the number of specified introgression events
 	      sampfreq = 2
-	       nsample = 300000 * Need to adjust according to according to your data size and the number of specified introgression events
+	       nsample = 300000 * Need to adjust according to your data size and the number of specified introgression events
 EOF
 	echo "" >&2
 	echo "Control file for BPP: $CTL_FILE" >&2
 	echo "Note: Remember to edit the $CTL_FILE file and adjust the parameter settings: nloci, phase, Threads, thetaprior, tauprior, burnin, nsample!" >&2
 	echo "" >&2
 	echo "=================================================" >&2
-	echo "The next command: BPP --cfile $CTL_FILE" >&2
+	echo "The next command: bpp --cfile $CTL_FILE" >&2
 }
 
 #: <<'NOTE'
@@ -762,43 +851,70 @@ if [[ -n "${LAST_STEP+x}" ]]; then
 	        event="${BASH_REMATCH[1]}"
 	        intr["$label"]="$event"
 			intr_sort=("$label" "${intr_sort[@]}")
-	    fi
+		fi
 	done < "$INTR_FILE" # read the introgression file
+	[[ -n "$new_tree" ]] || die "No 'tree:' entry was found in '$INTR_FILE'"
+	[[ ${#intr[@]} -gt 0 ]] || die "No introgression entries were found in '$INTR_FILE'"
 
 	#check whether the mcmc file  is empty 
-	data_lines=$(tail -n +2 "$MCMC_FILE" | wc -l)
+	data_lines=$(awk 'NR > 1 && NF { count++ } END { print count + 0 }' "$MCMC_FILE")
 	if [[ $data_lines -eq 0 ]]; then
-    	echo "ERROR: No data rows found in $MCMC_FILE (after skipping header)" >&2 
-    	exit 1
+		die "No data rows were found in '$MCMC_FILE' after the header"
 	fi
 	# read the header of the mcmc file
 	if IFS= read -r header < "$MCMC_FILE"; then
-	declare -A col_to_label 
-    IFS=$'\t' read -ra columns <<< "$header"
-    for idx in "${!columns[@]}"; do
-        col="${columns[$idx]}"
-        if [[ "$col" =~ ^phi.*:(.+)$ ]]; then
-        	label="${BASH_REMATCH[1]}"
+	declare -A col_to_label
+	read -ra columns <<< "$header"
+	for idx in "${!columns[@]}"; do
+		col="${columns[$idx]}"
+		if [[ "$col" == phi:* ]]; then
+			label="${col##*:}"
 			col_to_label[$((idx+1))]="$label"
-        fi
-    done
+		elif [[ "$col" == phi_* ]]; then
+			label="${col#phi_}"
+			col_to_label[$((idx+1))]="$label"
+		fi
+	done
 	fi
+	[[ ${#col_to_label[@]} -gt 0 ]] || die "No phi columns were found in '$MCMC_FILE'"
 
 	# calculate B10 and delete non-sig introgressions
 	declare -A nonsig_int
 	echo "Tree including ghost lineages: $new_tree" >&2
 	echo "Supported introgression events in the last step:" >&2
 	for i in "${!col_to_label[@]}"; do
-    	label="${col_to_label[$i]}"
-		B10=$(tail -n +2 "$MCMC_FILE" | awk -v e="$EPS" -v t="$data_lines" -v i="$i" '{if ($i < e) count++} END {print (count/t>0)?e/(count/t):"INF" }')
-        [[ "$B10" != "INF" ]] && (( $(echo "$B10 < $B10_CUTOFF" | bc -l 2>/dev/null) )) && nonsig_int[${intr["$label"]}]=1 && unset intr["$label"]
+		label="${col_to_label[$i]}"
+		[[ -n "${intr[$label]}" ]] || die "Phi column '$label' has no matching entry in '$INTR_FILE'"
+		B10=$(awk -v e="$EPS" -v i="$i" '
+			NR > 1 && NF {
+				value = $i
+				if (value ~ /^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$/) {
+					valid++
+					if (value < e) below++
+				}
+			}
+			END {
+				if (valid == 0) print "NA"
+				else if (below == 0) print "INF"
+				else printf "%.10g", e / (below / valid)
+			}
+		' "$MCMC_FILE")
+		[[ "$B10" != "NA" ]] || die "Phi column '$label' contains no numeric posterior samples"
+		if [[ "$B10" != "INF" ]] && awk -v value="$B10" -v cutoff="$B10_CUTOFF" 'BEGIN { exit !(value < cutoff) }'; then
+			nonsig_int["${intr[$label]}"]=1
+			unset 'intr[$label]'
+		fi
 		[[ -n "${intr[$label]}" ]] && printf "%-30s B10:%-10s\n" "$label(${intr[$label]})" "$B10" >&2
 	done
 
 	for i in "${!intr_sort[@]}"; do
 		[[ -n "${intr["${intr_sort[$i]}"]}" ]] && first=$i && break 
 	done
-	[[ -z "$first" ||  $first -gt 2 ]] && echo "Stop! None of the 3 newly added introgression events in the last step are supported!" >&2  && exit 1
+	if [[ -z "$first" || $first -gt 2 ]]; then
+		echo "Workflow complete: none of the three events added in the last round passed the B10 cutoff." >&2
+		echo "Use the supported model from the preceding round." >&2
+		exit 0
+	fi
 
 	for key in "${!nonsig_int[@]}"; do
 		if [[ $key =~ (Ghost.*$) ]]; then
@@ -819,9 +935,9 @@ if [[ -n "${LAST_STEP+x}" ]]; then
 	done
 
     #collecting added introgressions
-    for key in "${!intr[@]}"; do
-        int=${intr[$key]}
-        [[ "$int" =~ (.*)/(.*)\<--(.*)/(.*) ]]
+	for key in "${!intr[@]}"; do
+		int=${intr[$key]}
+		[[ "$int" =~ (.*)/(.*)\<--(.*)/(.*) ]] || die "Could not parse introgression entry '$int'"
         n1=${BASH_REMATCH[1]}
         n2=${BASH_REMATCH[2]}
         n3=${BASH_REMATCH[3]}
@@ -837,7 +953,7 @@ if [[ -n "${LAST_STEP+x}" ]]; then
             fi   
         fi   
     done 
-	adding_intro_sort=("${!adding_intro[@]}")
+	mapfile -t adding_intro_sort < <(printf '%s\n' "${!adding_intro[@]}" | LC_ALL=C sort)
 	
 	((step++))
 fi
@@ -852,12 +968,15 @@ declare -A TRIPLES_RANK  # Store rank of each triple (line number)
 
 if [[ -f "$DSTAT_FILE" ]]; then
 	if [[ $(wc -l < "$DSTAT_FILE") -lt 2  ]]; then
-		echo "Warning: No significant triples in the $DSTAT_FILE file." >&2
-		exit 1
+		echo "Workflow complete: no significant triples were found in '$DSTAT_FILE'." >&2
+		exit 0
 	fi
 
 	[[ -n "$LAST_STEP" ]] && echo "Skip explained triples:" >&2
-    IFS= read -r header_line < "$DSTAT_FILE"
+	IFS= read -r header_line < "$DSTAT_FILE"
+	read -ra dstat_header <<< "$header_line"
+	[[ "${dstat_header[0]}" == "P1" && "${dstat_header[1]}" == "P2" && "${dstat_header[2]}" == "P3" ]] || \
+		die "D-statistic file must begin with P1, P2, and P3 columns"
     
     # Read triples data (skip header)
     line_number=1
@@ -869,10 +988,9 @@ if [[ -f "$DSTAT_FILE" ]]; then
             continue
         fi
         
-        # Extract first three columns (P1, P2, P3)
-        p1=$(echo "$line" | awk '{print $1}')
-        p2=$(echo "$line" | awk '{print $2}')
-        p3=$(echo "$line" | awk '{print $3}')
+		# Extract first three columns (P1, P2, P3)
+		read -r p1 p2 p3 _ <<< "$line"
+		[[ -n "$p1" && -n "$p2" && -n "$p3" ]] || die "Malformed D-statistic row at data rank $((line_number - 1))"
         
         # Create triple identifier and store data
         triple_id="${p1},${p2},${p3}"
@@ -898,16 +1016,16 @@ if [[ -f "$DSTAT_FILE" ]]; then
         	echo "First triple to consider: $ANCHOR_TRIPLE" >&2
 		fi
     else # must be the conditions with --last_step
-        echo "Success! All significant triples in D-analysis have been fully explained by the supported introgression events in the last step" >&2
+		echo "Workflow complete: all significant D-statistic triples are explained by supported introgression events." >&2
 		if [[  ${#nonsig_int[@]} -eq 0 ]]; then
-			echo "Refer to The BPP output ${LAST_STEP}.txt, which contains the final introgression model and parameter estimation results" >&2
+			echo "The final model and parameter estimates are in '${LAST_STEP}.txt'." >&2
 		else
 			echo "" >&2	
 			echo "=================================================" >&2
 			echo "The final introgression model contains the following introgression events:" >&2
 			ctl_con
 		fi
-        exit 1
+		exit 0
     fi
 fi
 
@@ -1152,7 +1270,7 @@ done
 # Select optimal candidate
 if [[ ${#CANDIDATE_RESULTS[@]} -eq 0 || "$FBRANCH" == false ]]; then
     # Create default candidate using just the anchor triple
-    ANCHOR_TRIPLE_ID="${ANCHOR_P1}-${ANCHOR_P2}-${ANCHOR_P3}"
+    ANCHOR_TRIPLE_ID="${ANCHOR_P1},${ANCHOR_P2},${ANCHOR_P3}"
     ANCHOR_RANK="${TRIPLES_RANK[$ANCHOR_TRIPLE_ID]}"
     
     # Create single-element subsets for the anchor triple
@@ -1215,7 +1333,7 @@ inner_id=$(echo "$new_tree" | nw_labels - | grep -o -E '(N)[0-9]+' |grep -o '[0-
 newg_pos=$(echo $new_tree | nw_clade - $ANCHOR_P1 $ANCHOR_P2 $ANCHOR_P3 2>/dev/null)
 newg_pos=${newg_pos%;}
 new_tree=${new_tree/"$newg_pos"/"(Ghost$ghost_id,$newg_pos)N${inner_id}"}
-echo "The backcone tree including ghost lineages: $new_tree" >&2
+echo "The backbone tree including ghost lineages: $new_tree" >&2
 echo "" >&2
 
 #collecting new introgressions

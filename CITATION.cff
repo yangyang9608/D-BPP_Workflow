@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+message: "If you use D-BPP Workflow, please cite both the software and the associated methods article."
+title: "D-BPP Workflow"
+type: software
+authors:
+  - family-names: Yang
+    given-names: Yang
+    email: yangy@mail.bnu.edu.cn
+  - family-names: Pang
+    given-names: Xiao-xu
+    email: pangxiaoxu@mail.bnu.edu.cn
+repository-code: "https://github.com/yangyang9608/D-BPP_Workflow"
+url: "https://github.com/yangyang9608/D-BPP_Workflow"
+license: MIT
+keywords:
+  - introgression
+  - ghost introgression
+  - phylogenetic networks
+  - D-statistic
+  - BPP
+preferred-citation:
+  type: article
+  title: "Synergizing Bayesian and Heuristic Approaches: D-BPP Uncovers Ghost Introgression in Panthera and Thuja"
+  authors:
+    - family-names: Yang
+      given-names: Yang
+    - family-names: Pang
+      given-names: Xiao-xu
+    - family-names: Ding
+      given-names: Ya-Mei
+    - family-names: Zhang
+      given-names: Bo-Wen
+    - family-names: Bai
+      given-names: Wei-Ning
+    - family-names: Zhang
+      given-names: Da-Yong
+  journal: Systematic Biology
+  year: 2026
+  doi: "10.1093/sysbio/syag012"

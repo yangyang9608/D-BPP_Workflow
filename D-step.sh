@@ -1,6 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -o pipefail
+
 usage() {
-    echo "Usage: bash $0 (--fasta_dir <fasta_dir> |--vcf_file <vcf_file>) --imap <imap_file> --treelist <treelist_file> [--prefix <output_prefix>] [--cutoff <value>]"
+    local status="${1:-1}"
+    echo "Usage: bash $0 (--fasta_dir <fasta_dir> | --vcf_file <vcf_file>) --imap <imap_file> --treelist <treelist_file> [--prefix <output_prefix>] [--cutoff <value>]"
     echo ""
     echo "Required parameters (choose one input type):"
     echo "  --fasta_dir <dir>     Directory containing locus FASTA files (.fa, .fas, .fasta)"
@@ -15,9 +19,26 @@ usage() {
     echo "  --prefix <prefix>     Output prefix (path will be created if needed; default: D-step/Sig-D)"
     echo ""
     echo "Output:"
-    echo "  For each tree in treelist, generates prefix-Tree*-triples.txt containing"
+    echo "  For each tree in treelist, generates prefix-Tree*.tree and prefix-Tree*.sig-triples containing"
     echo "  all significant triples (after Bonferroni correction) sorted by Dp value in descending order"
+    exit "$status"
+}
+
+die() {
+    echo "ERROR: $*" >&2
     exit 1
+}
+
+require_value() {
+    local option="$1"
+    local value="${2-}"
+    if [[ -z "$value" || "$value" == --* ]]; then
+        die "$option requires a value"
+    fi
+}
+
+require_command() {
+    command -v "$1" >/dev/null 2>&1 || die "Required command '$1' was not found in PATH"
 }
 
 # default values
@@ -26,42 +47,48 @@ CUTOFF="0.01"
 PREFIX="D-step/Sig-D"
 
 if [[ $# -eq 0 ]]; then
-    usage
+    usage 1
 fi
 
 #########
 while [[ $# -gt 0 ]]; do
     case $1 in
         --fasta_dir)
+            require_value "$1" "${2-}"
             FAS_DIR="$2"
             shift 2
             ;;
         --vcf_file)
+            require_value "$1" "${2-}"
             VCF_FILE="$2"
             shift 2
             ;;
         --imap)
+            require_value "$1" "${2-}"
             IMAP_FILE="$2"
             shift 2
             ;;
         --treelist)
+            require_value "$1" "${2-}"
             TREELIST_FILE="$2"
             shift 2
             ;;
         --cutoff)
+            require_value "$1" "${2-}"
             CUTOFF="$2"
             shift 2
             ;;
         --prefix)
+            require_value "$1" "${2-}"
             PREFIX="$2"
             shift 2
             ;;
         -h|--help)
-            usage
+            usage 0
             ;;
         *)
-            echo "Unknown option: $1"
-            usage
+            echo "ERROR: Unknown option: $1" >&2
+            usage 1
             ;;
     esac
 done
@@ -69,63 +96,70 @@ done
 
 #check Required parameters and files
 if [[ -z "$IMAP_FILE" || -z "$TREELIST_FILE" ]]; then
-    echo "Error: Missing required parameters!"
-    usage
+    echo "ERROR: Missing required parameters" >&2
+    usage 1
 fi
 
 if [[ -n "$FAS_DIR" && -n "$VCF_FILE" ]]; then
-    echo "Error: Cannot specify both --fasta_dir and --phylip_file"
-    usage
+    echo "ERROR: Cannot specify both --fasta_dir and --vcf_file" >&2
+    usage 1
 elif [[ -z "$FAS_DIR" && -z "$VCF_FILE" ]]; then
-    echo "Error: Must specify either --fasta_dir or --phylip_file"
-    usage
+    echo "ERROR: Must specify either --fasta_dir or --vcf_file" >&2
+    usage 1
 elif [[ -n "$FAS_DIR" && ! -d "$FAS_DIR" ]]; then
-    echo "Error: FASTA directory $FAS_DIR does not exist!"
-    exit 1
+    die "FASTA directory '$FAS_DIR' does not exist"
 elif [[ -n "$VCF_FILE" && ! -f "$VCF_FILE" ]]; then
-    echo "Error: VCF file $VCF_FILE does not exist!"
-    exit 1
+    die "VCF file '$VCF_FILE' does not exist"
 fi
 
 for file in "$IMAP_FILE" "$TREELIST_FILE"; do
     if [[ ! -f "$file" ]]; then
-        echo "Error: Input file $file does not exist!"
-        exit 1
+        die "Input file '$file' does not exist"
     fi
 done
 
 # check cutoff
 if ! [[ "$CUTOFF" =~ ^-?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; then
-    echo "Error: cutoff must be a valid number"
-    echo "Current value: $CUTOFF"
-    exit 1
+    die "--cutoff must be numeric (received '$CUTOFF')"
 fi
+awk -v value="$CUTOFF" 'BEGIN { exit !(value > 0 && value <= 1) }' || \
+    die "--cutoff must be greater than 0 and no greater than 1 (received '$CUTOFF')"
 
 #Create the output directory if it does not exist
 PREFIX_DIR=$(dirname "$PREFIX")
-if [[ "$PREFIX_DIR" != "." && ! -d "$PREFIX_DIR" ]]; then
-    echo "Creating directory: $PREFIX_DIR"
-    mkdir -p "$PREFIX_DIR"
-    if [[ $? -ne 0 ]]; then
-        echo "Error: Failed to create directory $PREFIX_DIR"
-        exit 1
-    fi
+mkdir -p "$PREFIX_DIR" || die "Failed to create output directory '$PREFIX_DIR'"
+
+require_command Dsuite
+require_command nw_display
+if [[ -n "$FAS_DIR" ]]; then
+    require_command snp-sites
 fi
 
 
 declare -A INDIVIDUALS
 declare -A SPECIES
 INDIVIDUAL_LIST=()
-while IFS=$'\t' read -r individual species || [[ -n "$individual" ]]; do
+OUTGROUP_COUNT=0
+IMAP_LINE=0
+while read -r individual species extra || [[ -n "$individual" ]]; do
+    ((IMAP_LINE++))
+    [[ -z "$individual" || "$individual" == \#* ]] && continue
+    [[ -n "$species" && -z "$extra" ]] || die "Malformed IMAP line $IMAP_LINE; expected exactly two whitespace-delimited columns"
+    [[ -z "${INDIVIDUALS[$individual]}" ]] || die "Duplicate individual '$individual' in IMAP file"
     INDIVIDUALS["$individual"]=1
     INDIVIDUAL_LIST+=("$individual")
 
-    if [[ "$species" != "Outgroup" ]]; then
+    if [[ "$species" == "Outgroup" ]]; then
+        ((OUTGROUP_COUNT++))
+    else
         SPECIES["$species"]=1
     fi
 done < "$IMAP_FILE"
 TOTAL_INDIVIDUALS=${#INDIVIDUAL_LIST[@]}
 N_SPECIES=${#SPECIES[@]}
+[[ $TOTAL_INDIVIDUALS -gt 0 ]] || die "IMAP file contains no samples"
+[[ $OUTGROUP_COUNT -gt 0 ]] || die "IMAP file must contain at least one sample assigned to species 'Outgroup'"
+[[ $N_SPECIES -ge 3 ]] || die "D-statistic analysis requires at least three ingroup species"
 N_TRIPLES=$(( N_SPECIES * (N_SPECIES - 1) * (N_SPECIES - 2) / 6 ))
 
 
@@ -176,20 +210,20 @@ convert_haploid_to_diploid() {
 
 	# record ref/alt base index
         raw_allele_list[0] = $4;
-        split($5, raw_alt_arr, ",");
-        for (i in raw_alt_arr) {
+        raw_alt_count = split($5, raw_alt_arr, ",");
+        for (i = 1; i <= raw_alt_count; i++) {
             raw_allele_list[i] = raw_alt_arr[i];
         }
 
 	# generate new ref/alt
         ref_alt_str = $4 "," $5;
-        split(ref_alt_str, raw_bases, ",");
-        for (i in raw_bases) {
+        raw_base_count = split(ref_alt_str, raw_bases, ",");
+        for (i = 1; i <= raw_base_count; i++) {
             curr_base = raw_bases[i];
             if (curr_base == "" || curr_base == "*") continue;
 
-            split(deg_list[curr_base], ab_split, ",");
-            for (s in ab_split) {
+            split_count = split(deg_list[curr_base], ab_split, ",");
+            for (s = 1; s <= split_count; s++) {
                 b = ab_split[s];
                 if (b == "") continue;
 
@@ -200,17 +234,18 @@ convert_haploid_to_diploid() {
                 }
             }
         }
+        if (bases_count == 0) next;
         new_ref = bases_list[1];                # new REF
-        new_ref_idx = base_to_index[new_ref];   
         new_alt = "";				# new ALT
         for (i=2; i<=bases_count; i++) {
             new_alt = (new_alt == "") ? bases_list[i] : new_alt "," bases_list[i];
         }
         if (new_alt == "") new_alt = ".";
 
-        printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s", $1, $2, $3, new_ref, new_alt, $6, $7, $8, $9);
+        printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\tGT", $1, $2, $3, new_ref, new_alt, $6, $7, $8);
         for (i=10; i<=NF; i++) {
-            raw_gt = $i;
+            split($i, sample_fields, ":");
+            raw_gt = sample_fields[1];
             new_gt = "./."; 
             if (raw_gt !~ /^[0-9]+$/) {
                 printf("\t%s", new_gt);
@@ -221,8 +256,7 @@ convert_haploid_to_diploid() {
                 printf("\t%s", new_gt);
                 continue;
             }
-            split(deg_list[raw_base], raw_base_split, ",");
-            split_count = length(raw_base_split);
+            split_count = split(deg_list[raw_base], raw_base_split, ",");
             if (split_count == 1) {
                 base_idx = base_to_index[raw_base_split[1]];
                 new_gt = base_idx "/" base_idx;
@@ -242,16 +276,19 @@ convert_haploid_to_diploid() {
     ' "$input_vcf" > "$output_vcf"
 }
 
-# ===================== 调用示例 =====================
-# convert_haploid_to_diploid "input.vcf" "diploid_result.vcf"
-
-#Concatenate multi-locus FASTA
+# Concatenate multi-locus FASTA files and convert them to VCF.
 if [[ -n "$FAS_DIR" ]]; then
-    CONCAT_FASTA="${PREFIX}_concatenated.fasta"
-    TEMP_FASTA="${PREFIX}_temp.fasta"
-    
-    > "$CONCAT_FASTA"
-    > "$TEMP_FASTA"
+    CONCAT_FASTA=$(mktemp "${PREFIX_DIR}/.dbpp-concatenated.XXXXXX.fasta") || die "Could not create a temporary FASTA file"
+    TEMP_FASTA=$(mktemp "${PREFIX_DIR}/.dbpp-loci.XXXXXX.fasta") || die "Could not create a temporary FASTA file"
+    VCF_FILE_TEMP=$(mktemp "${PREFIX_DIR}/.dbpp-snps.XXXXXX.vcf") || die "Could not create a temporary VCF file"
+    GENERATED_VCF=$(mktemp "${PREFIX_DIR}/.dbpp-diploid.XXXXXX.vcf") || die "Could not create a temporary VCF file"
+    LOCUS_FASTA=""
+
+    cleanup_fasta_intermediates() {
+        rm -f "$CONCAT_FASTA" "$TEMP_FASTA" "$VCF_FILE_TEMP" "$GENERATED_VCF"
+        [[ -n "$LOCUS_FASTA" ]] && rm -f "$LOCUS_FASTA"
+    }
+    trap cleanup_fasta_intermediates EXIT
     
     VALID_LOCUS_COUNT=0
     TOTAL_LOCUS_COUNT=0
@@ -264,16 +301,41 @@ if [[ -n "$FAS_DIR" ]]; then
         TOTAL_LOCUS_COUNT=$((TOTAL_LOCUS_COUNT + 1))
         LOCUS_NAME=$(basename "$fasta_file")
         
-        declare -A PRESENT_INDIVIDUALS
+        LOCUS_FASTA=$(mktemp "${PREFIX_DIR}/.dbpp-locus.XXXXXX.fasta") || die "Could not create a temporary locus file"
+        awk '
+            /^>/ {
+                if (seen_header) print ""
+                print $0
+                seen_header = 1
+                next
+            }
+            seen_header {
+                gsub(/[[:space:]]/, "")
+                printf "%s", toupper($0)
+            }
+            END { if (seen_header) print "" }
+        ' "$fasta_file" > "$LOCUS_FASTA"
+
+        declare -A PRESENT_INDIVIDUALS=()
         MISSING_COUNT=0
-        
-        while IFS= read -r line || [[ -n "$line" ]]; do
-            if [[ "$line" =~ ^\> ]]; then
-                seq_name="${line:1}"
-                seq_name=$(echo "$seq_name" | awk '{print $1}')
-                PRESENT_INDIVIDUALS["$seq_name"]=1
+        LOCUS_LENGTH=0
+
+        while IFS= read -r header && IFS= read -r sequence; do
+            [[ "$header" == '>'* ]] || die "Malformed FASTA record in '$fasta_file'"
+            seq_name="${header#>}"
+            seq_name="${seq_name%%[[:space:]]*}"
+            [[ -n "$seq_name" ]] || die "Empty FASTA identifier in '$fasta_file'"
+            [[ -z "${PRESENT_INDIVIDUALS[$seq_name]}" ]] || die "Duplicate FASTA identifier '$seq_name' in '$fasta_file'"
+            [[ -n "$sequence" ]] || die "Empty sequence for '$seq_name' in '$fasta_file'"
+            [[ "$sequence" =~ ^[ACGTRYSWKMBDHVN?*-]+$ ]] || die "Unsupported sequence character for '$seq_name' in '$fasta_file'"
+            PRESENT_INDIVIDUALS["$seq_name"]=1
+
+            if [[ $LOCUS_LENGTH -eq 0 ]]; then
+                LOCUS_LENGTH=${#sequence}
+            elif [[ ${#sequence} -ne $LOCUS_LENGTH ]]; then
+                die "Sequences are not aligned to a common length in '$fasta_file'"
             fi
-        done < "$fasta_file"
+        done < "$LOCUS_FASTA"
         
         MISSING_LIST=()
         for individual in "${INDIVIDUAL_LIST[@]}"; do
@@ -285,37 +347,34 @@ if [[ -n "$FAS_DIR" ]]; then
         
         if [[ $MISSING_COUNT -eq 0 ]]; then
             VALID_LOCUS_COUNT=$((VALID_LOCUS_COUNT + 1))
-            awk '/^>/ {if (NR>1) print ""; print; next} {printf "%s", $0} END{print ""}' "$fasta_file" >> "$TEMP_FASTA"
+            cat "$LOCUS_FASTA" >> "$TEMP_FASTA"
         else
-            echo "    ✗ SKIP - Missing $MISSING_COUNT individuals: ${MISSING_LIST[*]}"
-            echo "Locus: $LOCUS_NAME - Missing $MISSING_COUNT individuals: ${MISSING_LIST[*]}"
+            echo "SKIP $LOCUS_NAME: missing $MISSING_COUNT individual(s): ${MISSING_LIST[*]}" >&2
         fi
-        
+
+        rm -f "$LOCUS_FASTA"
         unset PRESENT_INDIVIDUALS
     done
 
+    [[ $TOTAL_LOCUS_COUNT -gt 0 ]] || die "No .fa, .fas, or .fasta files were found in '$FAS_DIR'"
+    [[ $VALID_LOCUS_COUNT -gt 0 ]] || die "No FASTA locus contained every individual listed in the IMAP file"
+
     for individual in "${INDIVIDUAL_LIST[@]}"; do
         echo ">$individual" >> "$CONCAT_FASTA"
-        grep -A 1 "^>$individual$" "$TEMP_FASTA" | grep -v "^>" | tr -d '\n' >> "$CONCAT_FASTA"
-        echo "" >> "$CONCAT_FASTA"
+        awk -v wanted="$individual" '
+            /^>/ { capture = (substr($0, 2) == wanted); next }
+            capture { printf "%s", $0; capture = 0 }
+            END { print "" }
+        ' "$TEMP_FASTA" >> "$CONCAT_FASTA"
     done
 
-    rm -f "$TEMP_FASTA"
     echo "  Number of loci : $VALID_LOCUS_COUNT"
 
-
-    VCF_FILE_TEMP="${PREFIX}_snps.temp"
-    VCF_FILE="${PREFIX}_snps.vcf"
-    snp-sites -v -o "$VCF_FILE_TEMP" "$CONCAT_FASTA"
-    convert_haploid_to_diploid "$VCF_FILE_TEMP" "$VCF_FILE"
-    rm "$VCF_FILE_TEMP"
-
-    if [[ $? -ne 0 ]] || [[ ! -f "$VCF_FILE" ]]; then
-    	echo "Error: snp-sites failed to generate VCF file!"
-    	exit 1
-    fi
-
-    rm -f "$CONCAT_FASTA"
+    snp-sites -v -o "$VCF_FILE_TEMP" "$CONCAT_FASTA" || die "snp-sites failed to generate a VCF file"
+    [[ -s "$VCF_FILE_TEMP" ]] || die "snp-sites generated an empty VCF file"
+    convert_haploid_to_diploid "$VCF_FILE_TEMP" "$GENERATED_VCF" || die "Failed to convert haploid genotypes to diploid genotypes"
+    [[ -s "$GENERATED_VCF" ]] || die "Diploid VCF conversion generated an empty file"
+    VCF_FILE="$GENERATED_VCF"
 fi
 
 # Process each tree in the treelist file.
@@ -334,36 +393,28 @@ while IFS= read -r tree || [[ -n "$tree" ]]; do
     echo "=================================================================="
     echo "Processing tree $TREE_COUNT..."
     
-    if_tree=$(echo "$tree" |nw_display -)
-    if [[ -n "$(echo "$if_tree" | tr -d '[:space:]')" ]]; then
+    if if_tree=$(printf '%s\n' "$tree" | nw_display - 2>/dev/null) && [[ -n "$(printf '%s' "$if_tree" | tr -d '[:space:]')" ]]; then
     	echo "Tree topology: $tree"
-    	echo "$tree" | tr -d ' ' > "$TREE_FILE"
+		printf '%s\n' "$tree" | tr -d '[:space:]' > "$TREE_FILE"
     else
-    	echo "There is an issue with the format of '$tree'";
-    	exit 1
+        die "Invalid Newick tree on non-comment line $TREE_COUNT of '$TREELIST_FILE'"
     fi
         
     # run Dsuite Dtrios
     echo "Running 'Dsuite Dtrios' for tree $TREE_COUNT..."
-    Dsuite Dtrios "$VCF_FILE" "$IMAP_FILE" -t "$TREE_FILE" -o "$CURRENT_PREFIX" > /dev/null 2>&1
-    
-    if [[ $? -ne 0 ]]; then
-        echo "Error: Dsuite Dtrios failed for tree $TREE_COUNT"
-        #rm -f "$TREE_FILE"
-        exit 1
-    fi
+    DSUITE_LOG="${CURRENT_PREFIX}.Dsuite.log"
+    Dsuite Dtrios "$VCF_FILE" "$IMAP_FILE" -t "$TREE_FILE" -o "$CURRENT_PREFIX" > "$DSUITE_LOG" 2>&1 || \
+        die "Dsuite Dtrios failed for tree $TREE_COUNT; see '$DSUITE_LOG'"
     
     # check output_file
     D_FILE="${CURRENT_PREFIX}_tree.txt"
     if [[ ! -f "$D_FILE" ]]; then
-        echo "Error: D output file not found: $D_FILE"
-        rm -f "$TREE_FILE"
-        exit 1
+        die "Dsuite output file was not found: '$D_FILE'"
     fi
     
     # process D file
     OUTPUT_FILE="${CURRENT_PREFIX}.sig-triples"
-    TEMP_FILE="temp_filtered_${RANDOM}.txt"
+    TEMP_FILE=$(mktemp "${PREFIX_DIR}/.dbpp-filtered.XXXXXX.tsv") || die "Could not create a temporary results file"
     
     echo "Calculating Dp and filtering results (${FILTER_COL} <= $CUTOFF)..."
     
@@ -404,16 +455,19 @@ while IFS= read -r tree || [[ -n "$tree" ]]; do
                 print $0, Dp
             }
         } else if (filter_col == "p-value") {
-            pval = $pval_idx * N_TRIPLES
-            if (pval <= cutoff) {
-                print $0, Dp, pval 
+            adjusted_p = $pval_idx * N_TRIPLES
+            if (adjusted_p > 1) adjusted_p = 1
+            if (adjusted_p <= cutoff) {
+                print $0, Dp, adjusted_p
             }
         }
     }' "$D_FILE" > "$TEMP_FILE"
     
     if [[ $(wc -l < "$TEMP_FILE") -le 1 ]]; then
         echo "No results passed the filter for tree $TREE_COUNT"
-        rm -f "$TEMP_FILE" "$TREE_FILE"
+        head -n 1 "$TEMP_FILE" > "$OUTPUT_FILE"
+        rm -f "$TEMP_FILE"
+        rm -f "${CURRENT_PREFIX}_BBAA"* "${CURRENT_PREFIX}_combine"* "${CURRENT_PREFIX}_Dmin"* "$D_FILE"
         continue
     fi
     
@@ -434,9 +488,7 @@ while IFS= read -r tree || [[ -n "$tree" ]]; do
     
 done < "$TREELIST_FILE"
 
-if [[ -n "$FAS_DIR" ]]; then
-	rm "$VCF_FILE"
-fi
+[[ $TREE_COUNT -gt 0 ]] || die "Tree list contains no Newick trees"
 
 echo "=================================================================="
-echo "Processing completed!"
+echo "Processing completed: $PROCESSED_TREES of $TREE_COUNT candidate tree(s) produced significant triples."
