@@ -3,14 +3,7 @@
 [![CI](https://github.com/yangyang9608/D-BPP_Workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/yangyang9608/D-BPP_Workflow/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/yangyang9608/D-BPP_Workflow)](https://github.com/yangyang9608/D-BPP_Workflow/releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-<!--
-Zenodo DOI badge placeholder.
-After connecting this repository to Zenodo and obtaining the DOI, replace ZENODO_DOI
-with the DOI string (for example, 10.5281/zenodo.1234567) and uncomment the line below.
-
-[![DOI](https://zenodo.org/badge/DOI/ZENODO_DOI.svg)](https://doi.org/ZENODO_DOI)
--->
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22139144.svg)](https://doi.org/10.5281/zenodo.22139144)
 
 D-BPP is an expert-guided command-line workflow for reconstructing reticulate evolutionary histories from *D*-statistic signals and multispecies coalescent with introgression (MSci) analyses in BPP. It organizes candidate-tree screening, three-model tests for each unexplained triple, Bayes-factor filtering, explained-triple pruning, and optional marginal-likelihood comparison.
 
@@ -295,12 +288,21 @@ The test suite uses small synthetic fixtures and mocked external executables to 
 
 ## Citation
 
-If you use this workflow, cite:
+If you use D-BPP Workflow, please cite the specific software version used and the associated methods article.
+
+### Software
+
+For analyses performed with the current release:
+
+Yang Y, Pang X-X. 2026. *D-BPP Workflow*, version 1.0.1. Zenodo. [https://doi.org/10.5281/zenodo.22139143](https://doi.org/10.5281/zenodo.22139143)
+
+The concept DOI for all versions of D-BPP Workflow is [https://doi.org/10.5281/zenodo.22139144](https://doi.org/10.5281/zenodo.22139144). Use the version-specific DOI when reproducibility requires identifying the exact software release.
+
+### Associated methods article
 
 Yang Y, Pang XX, Ding YM, Zhang BW, Bai WN, Zhang DY. 2026. Synergizing Bayesian and heuristic approaches: D-BPP uncovers ghost introgression in *Panthera* and *Thuja*. *Systematic Biology*, syag012. [https://doi.org/10.1093/sysbio/syag012](https://doi.org/10.1093/sysbio/syag012)
 
-Repository citation metadata are also provided in [`CITATION.cff`](CITATION.cff).
-
+Repository citation metadata are provided in [`CITATION.cff`](CITATION.cff).
 ## License and contact
 
 D-BPP Workflow is released under the [MIT License](LICENSE). Questions and reproducible bug reports can be sent to `yangy@mail.bnu.edu.cn` or opened through GitHub Issues.

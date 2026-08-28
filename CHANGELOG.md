@@ -4,8 +4,16 @@ All notable changes to D-BPP Workflow will be documented in this file.
 
 ## Unreleased
 
-Changes made after v1.0.1 should be documented here before the next release.
+### Added
 
+- Enabled automatic Zenodo archival for GitHub releases.
+- Added the Zenodo concept DOI badge and GitHub Release badge to the README.
+- Added explicit software citation guidance for both the v1.0.1 version DOI and the all-versions concept DOI.
+
+### Changed
+
+- Updated `CITATION.cff` so that GitHub's repository citation metadata identify D-BPP Workflow v1.0.1 using its version-specific Zenodo DOI.
+- Kept the associated *Systematic Biology* methods article as a separate citation in the README.
 ## [1.0.1] - 2026-08-28
 
 This is the first formally versioned GitHub release of the hardened D-BPP Workflow.
