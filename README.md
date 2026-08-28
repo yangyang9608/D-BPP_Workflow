@@ -10,13 +10,33 @@ The workflow is intended primarily for datasets with fewer than 10 taxa. It is a
 ## Workflow overview
 
 ```mermaid
-flowchart TD
-    A["Aligned loci or VCF"] --> B["D-step: Dsuite screening"]
-    B --> C["Ranked significant triples"]
-    C --> D["BPP-step: three event models"]
-    D --> E{"Explained or unsupported?"}
+flowchart LR
+    %% Nodes
+    A["Input<br/>Aligned loci or VCF"]
+    B["D-step<br/>Dsuite screening"]
+    C["Candidates<br/>Ranked significant triples"]
+    D["BPP-step<br/>Three event models per triple"]
+    E{"Explained or unsupported?"}
+    F["Output<br/>Expert-reviewed MSci model"]
+
+    %% Flow
+    A --> B
+    B --> C
+    C --> D
+    D --> E
     E -- "No" --> D
-    E -- "Yes" --> F["Expert-reviewed MSci model"]
+    E -- "Yes" --> F
+
+    %% Styling
+    classDef input fill:#EAF4FF,stroke:#4A90E2,stroke-width:1.5px,color:#1F2D3D;
+    classDef process fill:#EEF7EE,stroke:#5C9E6E,stroke-width:1.5px,color:#1F2D3D;
+    classDef decision fill:#FFF6E8,stroke:#D9A441,stroke-width:1.5px,color:#1F2D3D;
+    classDef output fill:#F4ECFF,stroke:#8B6FCF,stroke-width:1.5px,color:#1F2D3D;
+
+    class A input;
+    class B,C,D process;
+    class E decision;
+    class F output;
 ```
 
 For the highest-ranked unexplained triple in the form `((P1,P2),P3)`, `BPP-step.sh` constructs models representing:
@@ -187,7 +207,7 @@ Do not advance to another round until replicate chains, effective sample sizes, 
   --prefix results/BPP-step/round2 \
   --last_step results/BPP-step/round1 \
   --skip_validation \
-  --eps 0.001 \
+  --eps 0.01 \
   --b10_cutoff 100 \
   2> results/BPP-step/round2.log
 ```
@@ -212,13 +232,13 @@ With the default BPP `phiprior = 1 1`, D-BPP approximates support for introgress
 B10 = epsilon / Pr(phi < epsilon | data).
 ```
 
-The workflow and standalone utility both default to `epsilon = 0.001`:
+The workflow and standalone utility both default to `epsilon = 0.001`. In the worked examples below, we explicitly use `epsilon = 0.01`:
 
 ```bash
 python3 cal_b10.py \
   results/BPP-step/round1.mcmc.txt \
   results/BPP-step/round1.b10.tsv \
-  --epsilon 0.001
+  --epsilon 0.01
 ```
 
 The shortcut assumes a Uniform(0,1) prior. If `phiprior` is changed, the prior probability of the near-zero interval must be recalculated rather than replaced by epsilon.
