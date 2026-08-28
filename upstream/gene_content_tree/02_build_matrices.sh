@@ -3,7 +3,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  04_build_matrices.sh --gene-count-manifest gene_count_tables.tsv --out-dir DIR
+  02_build_matrices.sh --gene-count-manifest gene_count_tables.tsv --out-dir DIR
 EOF
 }
 MANIFEST=""; OUT_DIR=""
@@ -23,5 +23,6 @@ while IFS=$'\t' read -r dataset table rest; do
   [[ -z "${dataset:-}" || "$dataset" == "dataset" || "$dataset" =~ ^# ]] && continue
   [[ -s "$table" ]] || { echo "Gene-count table missing/empty: $table" >&2; exit 1; }
   d="$OUT_DIR/$dataset"; mkdir -p "$d"
-  python3 "$SCRIPT_DIR/scripts/build_gene_content_matrix.py" --gene-count "$table" --out-prefix "$d/all_families" >/dev/null
+  python3 "$SCRIPT_DIR/scripts/build_gene_content_matrix.py" --gene-count "$table" --out-prefix "$d/all_families" --min-species 1 >/dev/null
+  python3 "$SCRIPT_DIR/scripts/build_gene_content_matrix.py" --gene-count "$table" --out-prefix "$d/nonsingleton" --min-species 2 >/dev/null
 done < "$MANIFEST"

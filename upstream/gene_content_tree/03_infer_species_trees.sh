@@ -3,7 +3,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  05_infer_species_trees.sh --matrix-dir DIR --out-dir DIR [--outgroup TAXON] [--threads AUTO] [--bootstraps 1000] [--model MK+R+FO+ASC]
+  03_infer_species_trees.sh --matrix-dir DIR --out-dir DIR [--outgroup TAXON] [--threads AUTO] [--bootstraps 1000] [--model MK+R+FO+ASC]
 EOF
 }
 MATRIX_DIR=""; OUT_DIR=""; OUTGROUP=""; THREADS="AUTO"; BOOTSTRAPS=1000; MODEL="MK+R+FO+ASC"; IQTREE=""

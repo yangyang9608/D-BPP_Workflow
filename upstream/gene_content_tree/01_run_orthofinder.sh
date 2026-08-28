@@ -3,7 +3,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  03_run_orthofinder.sh --sets-dir DIR --out-dir DIR [--threads 8] [--analysis-threads 1]
+  01_run_orthofinder.sh --sets-dir DIR --out-dir DIR [--threads 8] [--analysis-threads 1]
 EOF
 }
 SETS_DIR=""; OUT_DIR=""; THREADS=8; ANALYSIS_THREADS=1
