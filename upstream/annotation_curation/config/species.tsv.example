@@ -1,0 +1,5 @@
+species	genome_fasta	annotation_gff3
+SpeciesA	/path/to/SpeciesA.fa	/path/to/SpeciesA.gff3
+SpeciesB	/path/to/SpeciesB.fa	/path/to/SpeciesB.gff3
+SpeciesC	/path/to/SpeciesC.fa	/path/to/SpeciesC.gff3
+SpeciesOutgroup	/path/to/SpeciesOutgroup.fa	/path/to/SpeciesOutgroup.gff3

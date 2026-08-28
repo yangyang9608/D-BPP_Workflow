@@ -1,3 +1,7 @@
 __pycache__/
 *.py[cod]
 .DS_Store
+upstream/annotation_curation/work/
+upstream/annotation_curation/results/
+upstream/gene_content_tree/work/
+upstream/gene_content_tree/results/

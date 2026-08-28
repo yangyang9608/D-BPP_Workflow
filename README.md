@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22139144.svg)](https://doi.org/10.5281/zenodo.22139144)
 
-D-BPP is an expert-guided command-line workflow for reconstructing reticulate evolutionary histories from *D*-statistic signals and multispecies coalescent with introgression (MSci) analyses in BPP. It organizes candidate-tree screening, three-model tests for each unexplained triple, Bayes-factor filtering, explained-triple pruning, and optional marginal-likelihood comparison.
+D-BPP is an expert-guided command-line workflow for reconstructing reticulate evolutionary histories from *D*-statistic signals and multispecies coalescent with introgression (MSci) analyses in BPP. It organizes candidate-tree screening, three-model tests for each unexplained triple, Bayes-factor filtering, explained-triple pruning, and optional marginal-likelihood comparison. Optional upstream modules are provided for annotation curation and gene-content species-tree construction; D-BPP itself does not require gene-content data and can evaluate alternative backbone hypotheses from other sources.
 
 The workflow is intended primarily for datasets with fewer than 10 taxa. It is a model-construction aid, not an automatic biological decision system: users must inspect MCMC convergence, edit BPP priors and run settings, resolve conflicting network edges, and compare biologically plausible alternatives.
 
@@ -13,29 +13,33 @@ The workflow is intended primarily for datasets with fewer than 10 taxa. It is a
 
 ```mermaid
 flowchart LR
-    %% Nodes
-    A["Input<br/>Aligned loci or VCF"]
+    G["Genome assemblies<br/>+ annotations"]
+    H["Annotation curation<br/>AGAT / BEDTools / gffread"]
+    I["Curated proteomes"]
+    J["Gene-content tree<br/>OrthoFinder → matrix → IQ-TREE"]
+    T["Candidate backbone tree(s)"]
+    A["Aligned loci or VCF"]
     B["D-step<br/>Dsuite screening"]
     C["Candidates<br/>Ranked significant triples"]
     D["BPP-step<br/>Three event models per triple"]
     E{"Explained or unsupported?"}
     F["Output<br/>Expert-reviewed MSci model"]
 
-    %% Flow
+    G --> H --> I --> J --> T
+    T --> B
     A --> B
-    B --> C
-    C --> D
-    D --> E
+    B --> C --> D --> E
     E -- "No" --> D
     E -- "Yes" --> F
 
-    %% Styling
+    classDef upstream fill:#F3F7FB,stroke:#7A8FA6,stroke-width:1.3px,color:#1F2D3D;
     classDef input fill:#EAF4FF,stroke:#4A90E2,stroke-width:1.5px,color:#1F2D3D;
     classDef process fill:#EEF7EE,stroke:#5C9E6E,stroke-width:1.5px,color:#1F2D3D;
     classDef decision fill:#FFF6E8,stroke:#D9A441,stroke-width:1.5px,color:#1F2D3D;
     classDef output fill:#F4ECFF,stroke:#8B6FCF,stroke-width:1.5px,color:#1F2D3D;
 
-    class A input;
+    class G,H,I,J upstream;
+    class T,A input;
     class B,C,D process;
     class E decision;
     class F output;
@@ -78,12 +82,38 @@ command -v bpp Dsuite nw_display nw_clade nw_labels nw_prune
 command -v snp-sites  # required only for FASTA input in D-step
 ```
 
+## Optional upstream backbone workflow
+
+The [`upstream/`](upstream/) directory separates optional backbone preparation into two modules:
+
+1. [`upstream/annotation_curation`](upstream/annotation_curation) converts genome assemblies plus protein-coding annotations into curated proteomes using AGAT, BEDTools, gffread, SeqKit, and small Python utilities.
+2. [`upstream/gene_content_tree`](upstream/gene_content_tree) starts from curated proteomes, infers orthogroups with OrthoFinder, converts gene counts to binary presence–absence matrices, and infers candidate species trees with IQ-TREE.
+
+This separation is intentional. Annotation curation is a preprocessing step, whereas gene-content tree construction is a phylogenetic inference step. Either module can be replaced by user-supplied alternatives, and neither is required by D-BPP.
+
+Additional dependencies are:
+
+| Dependency | Purpose |
+|---|---|
+| [AGAT](https://agat.readthedocs.io/) | GFF3 parsing/repair and longest-isoform retention |
+| [BEDTools](https://bedtools.readthedocs.io/) | connected components of overlapping coding spans |
+| [gffread](https://github.com/gpertea/gffread) | CDS and protein extraction |
+| [SeqKit](https://bioinf.shenwei.me/seqkit/) | configurable minimum protein-length filtering |
+| [OrthoFinder](https://orthofinder.github.io/OrthoFinder/) | orthogroup inference |
+| [IQ-TREE](https://iqtree.github.io/) | gene-content species-tree inference |
+
+See the [upstream overview](upstream/README.md), [annotation-curation README](upstream/annotation_curation/README.md), and [gene-content tree README](upstream/gene_content_tree/README.md) for inputs, commands, and outputs.
+
+Manuscript-specific perturbation and robustness analyses are intentionally excluded from the public workflow.
+
 ## Installation
 
 ```bash
 git clone https://github.com/yangyang9608/D-BPP_Workflow.git
 cd D-BPP_Workflow
 chmod +x D-step.sh BPP-step.sh cal_b10.py cal_marginal_likelihoods.py
+chmod +x upstream/annotation_curation/*.sh upstream/annotation_curation/scripts/*.py
+chmod +x upstream/gene_content_tree/*.sh upstream/gene_content_tree/scripts/*.py
 ./D-step.sh --help
 ./BPP-step.sh --help
 ```
@@ -93,6 +123,8 @@ The scripts use only the Python standard library; no Python package installation
 A compact synthetic example is available in [`examples/minimal`](examples/minimal). It contains five 500-bp loci and two sampled individuals per ingroup species, and can be used to check input formatting and first-round BPP control-file generation. It is not a biological validation dataset.
 
 The full datasets associated with the published *Panthera* and *Thuja* analyses are archived on [Dryad](https://doi.org/10.5061/dryad.47d7wm3sr).
+
+For users starting from genome assemblies and annotations, the optional [`upstream/`](upstream/) workflow can curate annotations and generate candidate gene-content backbones before the D-step.
 
 ## Inputs
 
@@ -271,15 +303,16 @@ The utility rejects missing or duplicate integration points, verifies that the G
 ## Testing
 
 ```bash
-bash -n D-step.sh BPP-step.sh
-python3 -m py_compile cal_b10.py cal_marginal_likelihoods.py
+bash -n D-step.sh BPP-step.sh upstream/annotation_curation/*.sh upstream/gene_content_tree/*.sh
+python3 -m py_compile cal_b10.py cal_marginal_likelihoods.py upstream/annotation_curation/scripts/*.py upstream/gene_content_tree/scripts/*.py
 python3 -m unittest discover -s tests -v
 ```
 
-The test suite uses small synthetic fixtures and mocked external executables to test workflow orchestration. It does not replace empirical validation with real BPP and Dsuite analyses.
+The test suite uses small synthetic fixtures to test core workflow logic, annotation-curation utilities, and gene-content matrix construction. It does not replace empirical validation with real BPP, Dsuite, AGAT, OrthoFinder, or IQ-TREE analyses.
 
 ## Interpretation and limitations
 
+- Gene-content backbone inference is sensitive to annotation completeness and systematic annotation differences; it should be treated as one candidate-backbone strategy rather than an automatic guarantee of the true species tree.
 - Significant *D*-statistics identify imbalance, not a unique direction, donor, or biological mechanism.
 - Ghost-lineage placement is a candidate explanation requiring model comparison and biological scrutiny.
 - Automatically generated models are not exhaustive and can be incompatible when multiple events share an edge.
@@ -288,21 +321,20 @@ The test suite uses small synthetic fixtures and mocked external executables to 
 
 ## Citation
 
-If you use D-BPP Workflow, please cite the specific software version used and the associated methods article.
+If you use D-BPP Workflow, please cite the software release used and the associated methods article.
 
 ### Software
 
-For analyses performed with the current release:
+Zenodo archives each GitHub release and assigns a version-specific DOI. The all-versions concept DOI for D-BPP Workflow is [https://doi.org/10.5281/zenodo.22139144](https://doi.org/10.5281/zenodo.22139144). For reproducible analyses, cite the version-specific DOI corresponding to the release used.
 
-Yang Y, Pang X-X. 2026. *D-BPP Workflow*, version 1.0.1. Zenodo. [https://doi.org/10.5281/zenodo.22139143](https://doi.org/10.5281/zenodo.22139143)
-
-The concept DOI for all versions of D-BPP Workflow is [https://doi.org/10.5281/zenodo.22139144](https://doi.org/10.5281/zenodo.22139144). Use the version-specific DOI when reproducibility requires identifying the exact software release.
+The archived v1.0.1 release is available at [https://doi.org/10.5281/zenodo.22139143](https://doi.org/10.5281/zenodo.22139143). The v1.1.0 release will receive its own version-specific DOI automatically when the GitHub release is published.
 
 ### Associated methods article
 
 Yang Y, Pang XX, Ding YM, Zhang BW, Bai WN, Zhang DY. 2026. Synergizing Bayesian and heuristic approaches: D-BPP uncovers ghost introgression in *Panthera* and *Thuja*. *Systematic Biology*, syag012. [https://doi.org/10.1093/sysbio/syag012](https://doi.org/10.1093/sysbio/syag012)
 
 Repository citation metadata are provided in [`CITATION.cff`](CITATION.cff).
+
 ## License and contact
 
 D-BPP Workflow is released under the [MIT License](LICENSE). Questions and reproducible bug reports can be sent to `yangy@mail.bnu.edu.cn` or opened through GitHub Issues.
