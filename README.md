@@ -3,7 +3,7 @@
 [![CI](https://github.com/yangyang9608/D-BPP_Workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/yangyang9608/D-BPP_Workflow/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-D-BPP is an expert-guided command-line workflow for reconstructing reticulate evolutionary histories from D-statistic signals and multispecies-coalescent-with-introgression (MSci) analyses in BPP. It organizes candidate-tree screening, three-model tests for each unexplained triple, Bayes-factor filtering, explained-triple pruning, and optional marginal-likelihood comparison.
+D-BPP is an expert-guided command-line workflow for reconstructing reticulate evolutionary histories from *D*-statistic signals and multispecies coalescent with introgression (MSci) analyses in BPP. It organizes candidate-tree screening, three-model tests for each unexplained triple, Bayes-factor filtering, explained-triple pruning, and optional marginal-likelihood comparison.
 
 The workflow is intended primarily for datasets with fewer than 10 taxa. It is a model-construction aid, not an automatic biological decision system: users must inspect MCMC convergence, edit BPP priors and run settings, resolve conflicting network edges, and compare biologically plausible alternatives.
 
@@ -45,15 +45,15 @@ For the highest-ranked unexplained triple in the form `((P1,P2),P3)`, `BPP-step.
 2. introgression from P2 to P3; and
 3. introgression from P3 to P2.
 
-Supported events are retained, the triples they explain are removed, and the procedure advances to the next unexplained signal. With `--fbranch`, monophyletic sets sharing D-statistic patterns can be represented by ancestral rather than terminal branches.
+Supported events are retained, the triples they explain are removed, and the procedure advances to the next unexplained signal. With `--fbranch`, monophyletic sets sharing *D*-statistic patterns can be represented by ancestral rather than terminal branches.
 
 ## Requirements
 
 | Dependency | Purpose | When required |
 |---|---|---|
 | Bash 4+ | shell workflow | always |
-| Python 3.10+ | B10 and marginal-likelihood utilities | post-processing |
-| [Dsuite](https://github.com/millanek/Dsuite) | D-statistic calculation | D-step |
+| Python 3.10+ | B₁₀ and marginal-likelihood utilities | post-processing |
+| [Dsuite](https://github.com/millanek/Dsuite) | *D*-statistic calculation | D-step |
 | [BPP 4.8.x](https://github.com/bpp/bpp) | MSci model construction and inference | BPP-step |
 | [Newick Utilities](https://github.com/tjunier/newick_utils) | tree validation and clade operations | both steps |
 | [snp-sites](https://github.com/sanger-pathogens/snp-sites) | FASTA-to-VCF conversion | D-step with `--fasta_dir` |
@@ -159,10 +159,10 @@ results/D-step/Sig-D-Tree1.sig-triples
 results/D-step/Sig-D-Tree1.Dsuite.log
 ```
 
-Raw P values are Bonferroni-adjusted by the number of ingroup species triples, `choose(n, 3)`, and capped at 1. Significant triples are ranked by
+Raw *P* values are Bonferroni-adjusted by the number of ingroup species triples, `choose(n, 3)`, and capped at 1. Significant triples are ranked by
 
 ```text
-Dp = (ABBA - BABA) / (BBAA + ABBA + BABA).
+Dₚ = (ABBA - BABA) / (BBAA + ABBA + BABA).
 ```
 
 ### 2. Generate the first BPP model
@@ -184,7 +184,7 @@ This creates:
 |---|---|
 | `results/BPP-step/BPP.phy` | ingroup multi-locus PHYLIP generated from FASTA |
 | `results/BPP-step/BPP.imap` | BPP mapping without outgroup samples |
-| `round1.introgression` | tested event-to-phi-label mapping |
+| `round1.introgression` | tested event-to-ϕ-label mapping |
 | `round1.msci` | BPP MSci-generator definitions |
 | `round1.ctl` | editable BPP control-file template |
 
@@ -214,22 +214,22 @@ Do not advance to another round until replicate chains, effective sample sizes, 
 
 If another model is generated, edit its control file, run BPP, and repeat. The script returns exit status 0 for normal stopping conditions, including:
 
-- none of the three newly added events passes the B10 cutoff;
-- every significant D-statistic triple is explained; or
-- the D-statistic file contains no significant triple.
+- none of the three newly added events passes the B₁₀ cutoff;
+- every significant *D*-statistic triple is explained; or
+- the *D*-statistic file contains no significant triple.
 
 Warnings about multiple events involving the same tree edge require manual revision of the `.msci` and `.introgression` files before inference.
 
 ### 4. Optional ancestral-branch aggregation
 
-Add `--fbranch` to a first or subsequent BPP-step command to search for a monophyletic ancestral branch whose descendant triples all occur in the ranked D-statistic results. This rule changes model construction and should be checked against the focal phylogeny and sampling design.
+Add `--fbranch` to a first or subsequent BPP-step command to search for a monophyletic ancestral branch whose descendant triples all occur in the ranked *D*-statistic results. This rule changes model construction and should be checked against the focal phylogeny and sampling design.
 
-## B10 calculation
+## B₁₀ calculation
 
 With the default BPP `phiprior = 1 1`, D-BPP approximates support for introgression as
 
 ```text
-B10 = epsilon / Pr(phi < epsilon | data).
+B₁₀ = ε / Pr(ϕ < ε | data).
 ```
 
 The workflow and standalone utility both default to `epsilon = 0.001`. In the worked examples below, we explicitly use `epsilon = 0.01`:
@@ -241,7 +241,7 @@ python3 cal_b10.py \
   --epsilon 0.01
 ```
 
-The shortcut assumes a Uniform(0,1) prior. If `phiprior` is changed, the prior probability of the near-zero interval must be recalculated rather than replaced by epsilon.
+The shortcut assumes a Uniform(0, 1) prior. If `phiprior` is changed, the prior probability of the near-zero interval must be recalculated rather than replaced by ε.
 
 ## Log marginal likelihood
 
@@ -278,7 +278,7 @@ The test suite uses small synthetic fixtures and mocked external executables to 
 
 ## Interpretation and limitations
 
-- Significant D-statistics identify imbalance, not a unique direction, donor, or biological mechanism.
+- Significant *D*-statistics identify imbalance, not a unique direction, donor, or biological mechanism.
 - Ghost-lineage placement is a candidate explanation requiring model comparison and biological scrutiny.
 - Automatically generated models are not exhaustive and can be incompatible when multiple events share an edge.
 - Results depend on the candidate backbone, taxon sampling, data filtering, priors, and MCMC adequacy.
