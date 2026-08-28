@@ -20,14 +20,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--gene-count', required=True, help='OrthoFinder Orthogroups.GeneCount.tsv')
     ap.add_argument('--out-prefix', required=True)
-    ap.add_argument('--min-species', type=int, default=1,
-                    help='minimum number of species in which an orthogroup must be present')
     ap.add_argument('--keep-universal', action='store_true',
                     help='retain families present in all taxa (not recommended with +ASC)')
     args = ap.parse_args()
-
-    if args.min_species < 1:
-        raise SystemExit('--min-species must be >= 1')
 
     with open(args.gene_count, newline='', encoding='utf-8') as fh:
         reader = csv.DictReader(fh, delimiter='\t')
@@ -44,16 +39,12 @@ def main():
 
         kept = []
         dropped_universal = 0
-        dropped_min = 0
         for row in reader:
             og = row['Orthogroup']
             bits = []
             for sp in species:
                 bits.append(1 if parse_count(row[sp], og, sp) > 0 else 0)
             n_present = sum(bits)
-            if n_present < args.min_species:
-                dropped_min += 1
-                continue
             if not args.keep_universal and n_present == len(species):
                 dropped_universal += 1
                 continue
@@ -85,8 +76,6 @@ def main():
         out.write('metric\tvalue\n')
         out.write(f'n_species\t{len(species)}\n')
         out.write(f'n_orthogroups_retained\t{len(kept)}\n')
-        out.write(f'min_species\t{args.min_species}\n')
-        out.write(f'dropped_below_min_species\t{dropped_min}\n')
         out.write(f'dropped_universal\t{dropped_universal}\n')
         out.write(f'keep_universal\t{int(args.keep_universal)}\n')
 

@@ -27,7 +27,6 @@ class GeneContentPreprocessTests(unittest.TestCase):
                 GC_SCRIPTS / "build_gene_content_matrix.py",
                 "--gene-count", GC / "example" / "Orthogroups.GeneCount.tsv",
                 "--out-prefix", prefix,
-                "--min-species", "1",
             )
             lines = Path(str(prefix) + ".phy").read_text().strip().splitlines()
             self.assertEqual(lines[0], "4 7")  # universal OG removed
@@ -35,17 +34,6 @@ class GeneContentPreprocessTests(unittest.TestCase):
             summary = Path(str(prefix) + ".summary.tsv").read_text()
             self.assertIn("dropped_universal\t1", summary)
 
-    def test_nonsingleton_filter(self):
-        with tempfile.TemporaryDirectory() as td:
-            prefix = Path(td) / "matrix"
-            self.run_py(
-                GC_SCRIPTS / "build_gene_content_matrix.py",
-                "--gene-count", GC / "example" / "Orthogroups.GeneCount.tsv",
-                "--out-prefix", prefix,
-                "--min-species", "2",
-            )
-            header = Path(str(prefix) + ".phy").read_text().splitlines()[0]
-            self.assertEqual(header, "4 6")  # singleton OG removed plus universal OG removed
 
     def test_gff_to_cds_bed_and_cluster_selection(self):
         with tempfile.TemporaryDirectory() as td:

@@ -10,4 +10,4 @@ python3 -m py_compile cal_b10.py cal_marginal_likelihoods.py upstream/annotation
 python3 -m unittest discover -s tests -v
 ```
 
-Changes to model construction or statistical decision rules should include a minimal regression test and a clear explanation of the expected biological interpretation. Changes to the optional upstream modules should preserve the separation between annotation curation, gene-content backbone construction, and core D-BPP network inference. Manuscript-specific robustness analyses should not be added to the general-purpose workflow.
+Changes to model construction or statistical decision rules should include a minimal regression test and a clear explanation of the expected biological interpretation. Changes to the optional upstream modules should preserve the separation between annotation curation, gene-content species-tree construction, and core D-BPP network inference. Manuscript-specific robustness analyses should not be added to the general-purpose workflow.

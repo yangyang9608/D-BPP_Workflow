@@ -8,18 +8,18 @@ All notable changes to D-BPP Workflow will be documented in this file.
 
 ### Added
 
-- Added an optional `upstream/` workflow for constructing candidate species-tree backbones before core D-BPP analysis.
+- Added an optional `upstream/` workflow for constructing candidate species trees before core D-BPP analysis.
 - Added a dedicated `upstream/annotation_curation/` module for AGAT-based GFF3 parsing/repair and longest-isoform retention, BEDTools-based overlap clustering, gffread CDS/protein extraction, coding-model validation, and globally unique sequence identifiers.
 - Added configurable minimum protein-length datasets (default: 0, 50, 100, and 150 amino acids).
-- Added a separate `upstream/gene_content_tree/` module for independent OrthoFinder runs, binary gene-family presence–absence matrix construction, optional singleton exclusion, and IQ-TREE species-tree inference under `MK+R+FO+ASC` with standard nonparametric bootstrapping.
-- Added synthetic upstream examples and four regression tests for matrix conversion, CDS/protein validation, and overlap-representative selection.
+- Added a separate `upstream/gene_content_tree/` module for independent OrthoFinder runs, binary gene-family presence–absence matrix construction and IQ-TREE species-tree inference under `MK+R+FO+ASC` with standard nonparametric bootstrapping.
+- Added synthetic upstream examples and three regression tests for matrix conversion, CDS/protein validation, and overlap-representative selection.
 - Enabled automatic Zenodo archival for GitHub releases and added Release/DOI badges plus software citation guidance.
 
 ### Changed
 
 - Separated annotation preprocessing from gene-content phylogenetic inference so that the two upstream modules can be used or replaced independently.
-- Expanded the top-level workflow overview to distinguish optional upstream backbone construction from the core D-step/BPP-step workflow.
-- Extended CI syntax/compile checks and unit tests to the optional upstream modules; the full suite now contains 15 tests.
+- Expanded the top-level workflow overview to distinguish optional upstream species-tree construction from the core D-step/BPP-step workflow.
+- Extended CI syntax/compile checks and unit tests to the optional upstream modules; the full suite now contains 14 tests.
 - Updated repository citation metadata for the v1.1.0 release candidate; the version-specific Zenodo DOI will be added after Zenodo archives the release.
 - Kept the associated *Systematic Biology* methods article as a separate citation in the README.
 
