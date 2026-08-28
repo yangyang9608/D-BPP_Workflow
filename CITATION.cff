@@ -2,6 +2,8 @@ cff-version: 1.2.0
 message: "If you use D-BPP Workflow, please cite both the software and the associated methods article."
 title: "D-BPP Workflow"
 type: software
+version: 1.0.1
+date-released: 2026-08-28
 authors:
   - family-names: Yang
     given-names: Yang

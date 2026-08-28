@@ -4,14 +4,18 @@ All notable changes to D-BPP Workflow will be documented in this file.
 
 ## Unreleased
 
-### Example data
-- Expanded the minimal synthetic example to five 500-bp loci with two individuals per ingroup species, while keeping the unit-test fixtures deliberately small.
+Changes made after v1.0.1 should be documented here before the next release.
+
+## [1.0.1] - 2026-08-28
+
+This is the first formally versioned GitHub release of the hardened D-BPP Workflow.
 
 ### Added
 
-- Automated tests for B10 calculation, marginal-likelihood integration, FASTA concatenation, D-step filtering, BPP control-file generation, and iterative stopping behavior.
+- Automated tests for B₁₀ calculation, marginal-likelihood integration, FASTA concatenation, D-step filtering, BPP control-file generation, and iterative stopping behavior.
 - GitHub Actions continuous integration for Python 3.10 and 3.12.
-- MIT license and citation metadata.
+- A synthetic minimal example containing five 500-bp loci with two sampled individuals per ingroup species.
+- MIT license, citation metadata, contributing guidelines, and release changelog.
 
 ### Fixed
 
@@ -24,10 +28,13 @@ All notable changes to D-BPP Workflow will be documented in this file.
 - Match current BPP MCMC headers such as `phi:12<-6:Z2<-Z1` to the symbolic event labels stored by the workflow.
 - Return success for normal workflow stopping conditions.
 - Match thermodynamic-integration beta values with a numerical tolerance and reject incomplete quadrature sets.
-- Use the same default epsilon (`0.001`) in the workflow and standalone B10 utility.
+- Keep the workflow and standalone B₁₀ utility default epsilon synchronized at `0.001`.
 
 ### Changed
 
 - Strengthened input validation and error messages.
 - Made species and retained-introgression ordering deterministic.
 - Reworked the README around installation, quick-start commands, outputs, interpretation, and reproducibility.
+- Expanded and clarified the public minimal example while keeping unit-test fixtures deliberately small for fast CI execution.
+- Updated worked README examples to explicitly use `--eps 0.01` (and `--epsilon 0.01` for the standalone utility) without changing the software default of `0.001`.
+- Improved the README workflow diagram and standardized mathematical notation, including *D*-statistic, *P* values, Dₚ, ϕ, ε, and B₁₀.
