@@ -4,6 +4,7 @@ title: D-BPP Workflow
 type: software
 version: 1.1.0
 date-released: '2026-08-28'
+doi: 10.5281/zenodo.22141179
 authors:
 - family-names: Yang
   given-names: Yang
@@ -12,7 +13,7 @@ authors:
   given-names: Xiao-xu
   email: pangxiaoxu@mail.bnu.edu.cn
 repository-code: https://github.com/yangyang9608/D-BPP_Workflow
-url: https://doi.org/10.5281/zenodo.22139144
+url: https://doi.org/10.5281/zenodo.22139143
 license: MIT
 keywords:
 - introgression

@@ -4,6 +4,11 @@ All notable changes to D-BPP Workflow will be documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- Added the version-specific Zenodo DOI for v1.1.0 (`10.5281/zenodo.22141179`) to repository citation metadata.
+- Corrected the all-versions Zenodo concept DOI used by the README badge and citation guidance to `10.5281/zenodo.22139143`.
+- Updated the README citation section to distinguish the v1.1.0 DOI, the v1.0.1 DOI, and the all-versions concept DOI.
 ## [1.1.0] - 2026-08-28
 
 ### Added
