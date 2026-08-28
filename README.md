@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22139144.svg)](https://doi.org/10.5281/zenodo.22139144)
 
-D-BPP is an expert-guided command-line workflow for reconstructing reticulate evolutionary histories from *D*-statistic signals and multispecies coalescent with introgression (MSci) analyses in BPP. It organizes candidate-tree screening, three-model tests for each unexplained triple, Bayes-factor filtering, explained-triple pruning, and optional marginal-likelihood comparison. Optional upstream modules are provided for annotation curation and gene-content species-tree construction; D-BPP itself does not require gene-content data and can evaluate alternative backbone hypotheses from other sources.
+D-BPP is an expert-guided command-line workflow for reconstructing reticulate evolutionary histories from *D*-statistic signals and multispecies coalescent with introgression (MSci) analyses in BPP. It organizes candidate species-tree screening, three-model tests for each unexplained triple, Bayes-factor filtering, explained-triple pruning, and optional marginal-likelihood comparison. Optional upstream modules are provided for annotation curation and gene-content species-tree construction; D-BPP itself does not require gene-content data and can evaluate alternative species-tree hypotheses from other sources.
 
 The workflow is intended primarily for datasets with fewer than 10 taxa. It is a model-construction aid, not an automatic biological decision system: users must inspect MCMC convergence, edit BPP priors and run settings, resolve conflicting network edges, and compare biologically plausible alternatives.
 
@@ -17,7 +17,7 @@ flowchart LR
     H["Annotation curation<br/>AGAT / BEDTools / gffread"]
     I["Curated proteomes"]
     J["Gene-content tree<br/>OrthoFinder → matrix → IQ-TREE"]
-    T["Candidate backbone tree(s)"]
+    T["Candidate species tree(s)"]
     A["Aligned loci or VCF"]
     B["D-step<br/>Dsuite screening"]
     C["Candidates<br/>Ranked significant triples"]
@@ -82,9 +82,9 @@ command -v bpp Dsuite nw_display nw_clade nw_labels nw_prune
 command -v snp-sites  # required only for FASTA input in D-step
 ```
 
-## Optional upstream backbone workflow
+## Optional upstream species-tree workflow
 
-The [`upstream/`](upstream/) directory separates optional backbone preparation into two modules:
+The [`upstream/`](upstream/) directory separates optional preparation and inference of candidate species trees into two modules:
 
 1. [`upstream/annotation_curation`](upstream/annotation_curation) converts genome assemblies plus protein-coding annotations into curated proteomes using AGAT, BEDTools, gffread, SeqKit, and small Python utilities.
 2. [`upstream/gene_content_tree`](upstream/gene_content_tree) starts from curated proteomes, infers orthogroups with OrthoFinder, converts gene counts to binary presence–absence matrices, and infers candidate species trees with IQ-TREE.
@@ -124,7 +124,7 @@ A compact synthetic example is available in [`examples/minimal`](examples/minima
 
 The full datasets associated with the published *Panthera* and *Thuja* analyses are archived on [Dryad](https://doi.org/10.5061/dryad.47d7wm3sr).
 
-For users starting from genome assemblies and annotations, the optional [`upstream/`](upstream/) workflow can curate annotations and generate candidate gene-content backbones before the D-step.
+For users starting from genome assemblies and annotations, the optional [`upstream/`](upstream/) workflow can curate annotations and generate candidate gene-content species trees before the D-step.
 
 ## Inputs
 
@@ -161,7 +161,7 @@ Provide one semicolon-terminated Newick tree per non-comment line. Exclude the o
 
 ## Quick start
 
-### 1. Screen candidate backbones with Dsuite
+### 1. Screen candidate species trees with Dsuite
 
 From a FASTA directory:
 
@@ -312,11 +312,11 @@ The test suite uses small synthetic fixtures to test core workflow logic, annota
 
 ## Interpretation and limitations
 
-- Gene-content backbone inference is sensitive to annotation completeness and systematic annotation differences; it should be treated as one candidate-backbone strategy rather than an automatic guarantee of the true species tree.
+- Gene-content species-tree inference is sensitive to annotation completeness and systematic annotation differences; it should be treated as one candidate species-tree strategy rather than an automatic guarantee of the true species tree.
 - Significant *D*-statistics identify imbalance, not a unique direction, donor, or biological mechanism.
 - Ghost-lineage placement is a candidate explanation requiring model comparison and biological scrutiny.
 - Automatically generated models are not exhaustive and can be incompatible when multiple events share an edge.
-- Results depend on the candidate backbone, taxon sampling, data filtering, priors, and MCMC adequacy.
+- Results depend on the candidate species tree, taxon sampling, data filtering, priors, and MCMC adequacy.
 - Record software versions, random seeds, control files, convergence diagnostics, and all manual model edits for reproducibility.
 
 ## Citation
