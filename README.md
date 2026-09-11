@@ -89,7 +89,6 @@ Additional dependencies are:
 
 See the [upstream overview](upstream/README.md), [annotation-curation README](upstream/annotation_curation/README.md), and [gene-content tree README](upstream/gene_content_tree/README.md) for inputs, commands, and outputs.
 
-Manuscript-specific perturbation and robustness analyses are intentionally excluded from the public workflow.
 
 ## Installation
 
