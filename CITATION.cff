@@ -11,8 +11,9 @@ authors:
 - family-names: Pang
   given-names: Xiao-xu
   email: pangxiaoxu@mail.bnu.edu.cn
+doi: 10.5281/zenodo.22704781
 repository-code: https://github.com/yangyang9608/D-BPP_Workflow
-url: https://doi.org/10.5281/zenodo.22139143
+url: https://doi.org/10.5281/zenodo.22704781
 license: MIT
 keywords:
 - introgression

@@ -367,7 +367,7 @@ If you use D-BPP Workflow, please cite the software release used and the associa
 
 ### Software
 
-Current release: **D-BPP Workflow v1.2**. The repository is connected to the all-versions Zenodo concept DOI [https://doi.org/10.5281/zenodo.22139143](https://doi.org/10.5281/zenodo.22139143). After v1.2 is archived, cite the **version-specific v1.2 DOI** shown on the Zenodo record; this DOI should also be used in the Bioinformatics manuscript.
+Current release: **D-BPP Workflow v1.2**. This version is archived on Zenodo at [https://doi.org/10.5281/zenodo.22704781](https://doi.org/10.5281/zenodo.22704781). The all-versions Zenodo concept DOI is [https://doi.org/10.5281/zenodo.22139143](https://doi.org/10.5281/zenodo.22139143). For analyses using v1.2, please cite the version-specific DOI.
 
 Repository citation metadata are provided in [`CITATION.cff`](CITATION.cff).
 
