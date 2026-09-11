@@ -1,0 +1,2 @@
+triple	ABBA	BABA	BBAA	D_expected	Dp_expected
+((A,B),C)	600	200	200	0.500000	0.400000

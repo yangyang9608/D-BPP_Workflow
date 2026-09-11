@@ -1,6 +1,12 @@
 __pycache__/
 *.py[cod]
 .DS_Store
+
+/software_versions.tsv
+/results/
+/marginal_likelihood_run/
+/marginal_likelihood_results/
+
 upstream/annotation_curation/work/
 upstream/annotation_curation/results/
 upstream/gene_content_tree/work/

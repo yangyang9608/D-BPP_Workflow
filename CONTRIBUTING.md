@@ -5,7 +5,9 @@ Bug reports and focused pull requests are welcome. Please include the command us
 Before opening a pull request, run:
 
 ```bash
-bash -n D-step.sh BPP-step.sh upstream/annotation_curation/*.sh upstream/gene_content_tree/*.sh
+for f in D-step.sh BPP-step.sh scripts/*.sh upstream/annotation_curation/*.sh upstream/gene_content_tree/*.sh; do
+  bash -n "$f"
+done
 python3 -m py_compile cal_b10.py cal_marginal_likelihoods.py upstream/annotation_curation/scripts/*.py upstream/gene_content_tree/scripts/*.py
 python3 -m unittest discover -s tests -v
 ```

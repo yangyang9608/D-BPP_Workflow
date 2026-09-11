@@ -26,8 +26,7 @@ jobs:
 
       - name: Check shell syntax
         run: |
-          bash -n D-step.sh BPP-step.sh
-          for f in upstream/annotation_curation/*.sh upstream/gene_content_tree/*.sh; do
+          for f in D-step.sh BPP-step.sh scripts/*.sh upstream/annotation_curation/*.sh upstream/gene_content_tree/*.sh; do
             bash -n "$f"
           done
 

@@ -2,61 +2,44 @@
 
 All notable changes to D-BPP Workflow will be documented in this file.
 
-## Unreleased
+## [1.2] - 2026-09-11
+### Added
+
+- Added `environment.yml` and `INSTALL.md` for reproducible core installation.
+- Added a compact 20-locus synthetic example with three ingroup species and one outgroup for running D-statistic screening and first-round MSci model construction.
+- Added `scripts/check_dependencies.sh` and `scripts/record_versions.sh` for dependency verification and provenance records.
+- Added `scripts/install_external.sh` for one-command installation of the release-pinned BPP 4.8.7 and Dsuite build inside the active Conda environment. The installer also supports explicit `BPP_VERSION` / `DSUITE_COMMIT` overrides and a `--latest` compatibility-testing mode while preserving pinned v1.2 defaults.
+- Added `--prior_mass` to `BPP-step.sh`, allowing the Savage-Dickey numerator `Pr(phi < epsilon)` to be supplied explicitly when the phi prior is changed from `Uniform(0,1)`.
+- Expanded `cal_b10.py` to report B10 at both `epsilon = 0.01` and `epsilon = 0.001` by default, with compact and detailed output tables.
+- Expanded `cal_marginal_likelihoods.py` with `prepare`, `run`, `summarize`, and `compare` subcommands that separate execution logs/manifests from numerical results and support comparison of final networks.
 
 ### Changed
 
-- Added the version-specific Zenodo DOI for v1.1.0 (`10.5281/zenodo.22141179`) to repository citation metadata.
-- Corrected the all-versions Zenodo concept DOI used by the README badge and citation guidance to `10.5281/zenodo.22139143`.
-- Updated the README citation section to distinguish the v1.1.0 DOI, the v1.0.1 DOI, and the all-versions concept DOI.
-## [1.1.0] - 2026-08-28
+- Changed the default B10 interval in `BPP-step.sh` from `epsilon = 0.001` to `epsilon = 0.01`; `--eps` remains user-configurable.
+- Kept the default B10 retention cutoff at 100 and documented it as user-configurable.
+- Updated the README to describe the joint candidate MSci model, iterative state transfer, final-network comparison, and the v1.2 post-processing interfaces.
+- Marginal-likelihood parsing now accepts both current comma-delimited beta-weight files and older whitespace-delimited beta/weight files.
+- Expanded automated tests to cover the two default epsilon values, custom prior masses, marginal-likelihood run records, result summaries, model comparison, and non-Uniform phi-prior safeguards.
 
-### Added
+### Compatibility
 
-- Added an optional `upstream/` workflow for constructing candidate species trees before core D-BPP analysis.
-- Added a dedicated `upstream/annotation_curation/` module for AGAT-based GFF3 parsing/repair and longest-isoform retention, BEDTools-based overlap clustering, gffread CDS/protein extraction, coding-model validation, and globally unique sequence identifiers.
-- Added configurable minimum protein-length datasets (default: 0, 50, 100, and 150 amino acids).
-- Added a separate `upstream/gene_content_tree/` module for independent OrthoFinder runs, binary gene-family presence–absence matrix construction and IQ-TREE species-tree inference under `MK+R+FO+ASC` with standard nonparametric bootstrapping.
-- Added synthetic upstream examples and three regression tests for matrix conversion, CDS/protein validation, and overlap-representative selection.
-- Enabled automatic Zenodo archival for GitHub releases and added Release/DOI badges plus software citation guidance.
-
-### Changed
-
-- Separated annotation preprocessing from gene-content phylogenetic inference so that the two upstream modules can be used or replaced independently.
-- Expanded the top-level workflow overview to distinguish optional upstream species-tree construction from the core D-step/BPP-step workflow.
-- Extended CI syntax/compile checks and unit tests to the optional upstream modules; the full suite now contains 14 tests.
-- Updated repository citation metadata for the v1.1.0 release candidate; the version-specific Zenodo DOI will be added after Zenodo archives the release.
-- Kept the associated *Systematic Biology* methods article as a separate citation in the README.
-
-## [1.0.1] - 2026-08-28
-
-This is the first formally versioned GitHub release of the hardened D-BPP Workflow.
-
-### Added
-
-- Automated tests for B₁₀ calculation, marginal-likelihood integration, FASTA concatenation, D-step filtering, BPP control-file generation, and iterative stopping behavior.
-- GitHub Actions continuous integration for Python 3.10 and 3.12.
-- A synthetic minimal example containing five 500-bp loci with two sampled individuals per ingroup species.
-- MIT license, citation metadata, contributing guidelines, and release changelog.
+- Retained the deprecated `--esp` alias for `--eps`.
+- Retained the legacy three-positional-argument syntax of `cal_marginal_likelihoods.py` for existing analyses.
 
 ### Fixed
 
-- Accept the documented `--eps` option in `BPP-step.sh`; retain `--esp` as a deprecated alias.
-- Preserve a populated `BPP.imap` during follow-up rounds.
-- Generate the BPP `phase` vector only after the complete species count is known.
-- Prevent FASTA concatenation from inserting `grep` group separators into sequences.
-- Check the actual exit status of `snp-sites`, VCF conversion, and BPP MSCI-model generation.
-- Use the documented BPP `--msci-create` option.
-- Match current BPP MCMC headers such as `phi:12<-6:Z2<-Z1` to the symbolic event labels stored by the workflow.
-- Return success for normal workflow stopping conditions.
-- Match thermodynamic-integration beta values with a numerical tolerance and reject incomplete quadrature sets.
-- Keep the workflow and standalone B₁₀ utility default epsilon synchronized at `0.001`.
-
-### Changed
-
-- Strengthened input validation and error messages.
-- Made species and retained-introgression ordering deterministic.
-- Reworked the README around installation, quick-start commands, outputs, interpretation, and reproducibility.
-- Expanded and clarified the public minimal example while keeping unit-test fixtures deliberately small for fast CI execution.
-- Updated worked README examples to explicitly use `--eps 0.01` (and `--epsilon 0.01` for the standalone utility) without changing the software default of `0.001`.
-- Improved the README workflow diagram and standardized mathematical notation, including *D*-statistic, *P* values, Dₚ, ϕ, ε, and B₁₀.
+- Fixed FASTA concatenation in `D-step.sh` so sequence identifiers are consistently parsed as the first whitespace-delimited header token; descriptive FASTA headers no longer produce empty concatenated sequences.
+- Added strict one-to-one validation between introgression events and BPP posterior `phi` columns, together with row-width and `phi` range checks before B10 filtering.
+- Corrected iterative stopping behavior: a triple whose three newly introduced events all fail the B10 cutoff is now recorded as individually tested and removed from the queue, while the workflow continues to the next highest-ranked remaining triple. Round-specific `*.triple-state.tsv` files track `candidate`, `pending`, `explained`, and `tested` states; the workflow stops only when the candidate queue is empty.
+- Clarified and regression-tested cumulative-network transfer between rounds: each new candidate model carries forward every reticulation that remains supported after the preceding BPP evaluation, including when the immediately preceding triple yields no newly supported event.
+- Moved ancestral-branch subset enumeration behind `--fbranch`, avoiding unnecessary combinatorial candidate generation in the default workflow.
+- Corrected CI and documentation shell-syntax commands to run `bash -n` separately on every shell script.
+- Fixed reduced final-model construction after unsupported ghost introgression events: unary internal nodes left by `nw_prune` are now collapsed before `bpp --msci-create`, preventing invalid reduced trees such as `(((A,B)N1,C)N2)N3;`.
+- Updated completed-workflow handling so the reduced supported network is written as `final.msci`, `final.ctl`, and `final.introgression` rather than being mislabeled as another numbered round.
+- Updated `D-step.sh` to identify the appended `Dp` column dynamically before sorting significant triples, so current Dsuite output with additional clustering columns is handled correctly.
+- Updated marginal-likelihood summarization to read the BPP screen logs recorded in `run_manifest.tsv` by default, matching where BPP 4.8.7 reports `BFbeta` and `E_b(lnf(X))`; explicit output globs remain supported.
+- Standardized installation and release documentation on BPP 4.8.7 and added a version warning to the dependency check.
+- Expanded `environment.yml` to include Bash, Perl and the Git/C++ build toolchain required for a clean-server installation.
+- Froze the v1.2 Dsuite dependency at version 0.5 r58, Git commit `a547f99599d763c1760548191ea3f62cc58e8ac3`, based on the clean CentOS 8 acceptance environment.
+- Updated version recording to obtain the Newick Utilities version from Conda metadata because `nw_prune` does not implement a `--version` option.
+- Added external-install metadata so dependency checks and `software_versions.tsv` distinguish the exact `release-pinned` v1.2 environment from user-selected `custom` and unpinned `latest` compatibility-test installations.

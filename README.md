@@ -5,9 +5,9 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22139143.svg)](https://doi.org/10.5281/zenodo.22139143)
 
-D-BPP is an expert-guided command-line workflow for reconstructing reticulate evolutionary histories from *D*-statistic signals and multispecies coalescent with introgression (MSci) analyses in BPP. It organizes candidate species-tree screening, three-model tests for each unexplained triple, Bayes-factor filtering, explained-triple pruning, and optional marginal-likelihood comparison. Optional upstream modules are provided for annotation curation and gene-content species-tree construction; D-BPP itself does not require gene-content data and can evaluate alternative species-tree hypotheses from other sources.
+D-BPP is an expert-guided command-line workflow for reconstructing reticulate evolutionary histories from *D*-statistic signals and multispecies coalescent with introgression (MSci) analyses in BPP. It organizes candidate species-tree screening, construction of a joint candidate MSci model for each unexplained triple, Bayes-factor filtering, explained-triple pruning, iterative transfer of supported reticulations, and optional marginal-likelihood comparison among final networks obtained from alternative candidate species trees. Optional upstream modules are provided for annotation curation and gene-content species-tree construction; D-BPP itself does not require gene-content data and can evaluate candidate species-tree hypotheses from other sources.
 
-The workflow is intended primarily for datasets with fewer than 10 taxa. It is a model-construction aid, not an automatic biological decision system: users must inspect MCMC convergence, edit BPP priors and run settings, resolve conflicting network edges, and compare biologically plausible alternatives.
+D-BPP is designed for relatively small taxon sets whose candidate networks can be inspected explicitly. It is a model-construction aid, not an automatic biological decision system: users must inspect MCMC convergence, edit BPP priors and run settings, resolve conflicting network edges, and compare biologically plausible alternatives.
 
 ## Workflow overview
 
@@ -21,16 +21,20 @@ flowchart LR
     A["Aligned loci or VCF"]
     B["D-step<br/>Dsuite screening"]
     C["Candidates<br/>Ranked significant triples"]
-    D["BPP-step<br/>Three event models per triple"]
-    E{"Explained or unsupported?"}
-    F["Output<br/>Expert-reviewed MSci model"]
+    D["BPP-step<br/>Construct candidate MSci model"]
+    E["BPP<br/>Posterior estimation"]
+    K["BPP-step<br/>B10 filtering and state update"]
+    R["Update cumulative network<br/>retain supported events<br/>remove unsupported events<br/>mark initiating triple tested"]
+    X["Reclassify triples explained<br/>by the supported network"]
+    U{"Significant triples remain<br/>pending in the queue?"}
+    F["Final supported<br/>MSci network"]
 
     G --> H --> I --> J --> T
     T --> B
     A --> B
-    B --> C --> D --> E
-    E -- "No" --> D
-    E -- "Yes" --> F
+    B --> C --> D --> E --> K --> R --> X --> U
+    U -- "Yes" --> D
+    U -- "No" --> F
 
     classDef upstream fill:#F3F7FB,stroke:#7A8FA6,stroke-width:1.3px,color:#1F2D3D;
     classDef input fill:#EAF4FF,stroke:#4A90E2,stroke-width:1.5px,color:#1F2D3D;
@@ -40,47 +44,28 @@ flowchart LR
 
     class G,H,I,J upstream;
     class T,A input;
-    class B,C,D process;
-    class E decision;
+    class B,C,D,E,K,R process;
+    class U decision;
     class F output;
 ```
 
-For the highest-ranked unexplained triple in the form `((P1,P2),P3)`, `BPP-step.sh` constructs models representing:
+For the highest-ranked unexplained triple in the form `((P1,P2),P3)`, `BPP-step.sh` augments the current network with three candidate events in one MSci model: ghost introgression to P1 and both sampled-lineage directions between P2 and P3. The two sampled-lineage directions are encoded jointly as bidirectional introgression, while the ghost hypothesis is encoded as a separate unidirectional event.
 
-1. ghost introgression to P1;
-2. introgression from P2 to P3; and
-3. introgression from P3 to P2.
-
-Supported events are retained, the triples they explain are removed, and the procedure advances to the next unexplained signal. With `--fbranch`, monophyletic sets sharing *D*-statistic patterns can be represented by ancestral rather than terminal branches.
+Supported events are retained, triples classified as explained by the updated network are skipped, and the procedure advances to the next highest-ranked eligible signal. Each successive candidate model is built on the cumulative network of reticulations that remain supported after evaluation of the preceding model, while previously introduced reticulations are reassessed in subsequent models. A round with no newly supported event therefore does not reset or terminate the analysis: the initiating triple is marked as tested, unsupported new events are removed, and the next candidate triple is added to the retained supported network. With `--fbranch`, compatible descendant triples can be used to propose an ancestral rather than terminal placement; such placements require user review.
 
 ## Requirements
 
 | Dependency | Purpose | When required |
 |---|---|---|
 | Bash 4+ | shell workflow | always |
-| Python 3.10+ | B₁₀ and marginal-likelihood utilities | post-processing |
+| Python 3.10+ | final-model tree normalization, B₁₀ and marginal-likelihood utilities | BPP-step finalization and post-processing |
 | [Dsuite](https://github.com/millanek/Dsuite) | *D*-statistic calculation | D-step |
-| [BPP 4.8.x](https://github.com/bpp/bpp) | MSci model construction and inference | BPP-step |
+| [BPP 4.8.7](https://github.com/bpp/bpp/releases/tag/v4.8.7) | MSci model construction and inference | BPP-step |
 | [Newick Utilities](https://github.com/tjunier/newick_utils) | tree validation and clade operations | both steps |
 | [snp-sites](https://github.com/sanger-pathogens/snp-sites) | FASTA-to-VCF conversion | D-step with `--fasta_dir` |
 | Perl | internal-node and tree-string processing | BPP-step |
 
-Add the directories containing the executables to `PATH`. For example:
-
-```bash
-export PATH_BPP="/path/to/bpp-directory"
-export PATH_DSUITE="/path/to/Dsuite/Build"
-export PATH_SNP_SITES="/path/to/snp-sites/bin"
-export PATH_NEWICK_UTILS="/path/to/newick_utils/src"
-export PATH="$PATH_BPP:$PATH_DSUITE:$PATH_SNP_SITES:$PATH_NEWICK_UTILS:$PATH"
-```
-
-Confirm the installation before starting:
-
-```bash
-command -v bpp Dsuite nw_display nw_clade nw_labels nw_prune
-command -v snp-sites  # required only for FASTA input in D-step
-```
+For the supported Linux x86_64 installation, `environment.yml` supplies the core runtime and build tools, and `scripts/install_external.sh` installs the release-pinned BPP and Dsuite builds into the active Conda environment. Manual `PATH` editing is therefore not required for the standard installation. See [`INSTALL.md`](INSTALL.md) for other platforms.
 
 ## Optional upstream species-tree workflow
 
@@ -108,19 +93,40 @@ Manuscript-specific perturbation and robustness analyses are intentionally exclu
 
 ## Installation
 
+For the supported Linux x86_64 installation, the full runtime can be prepared with the following commands:
+
 ```bash
 git clone https://github.com/yangyang9608/D-BPP_Workflow.git
 cd D-BPP_Workflow
-chmod +x D-step.sh BPP-step.sh cal_b10.py cal_marginal_likelihoods.py
-chmod +x upstream/annotation_curation/*.sh upstream/annotation_curation/scripts/*.py
-chmod +x upstream/gene_content_tree/*.sh upstream/gene_content_tree/scripts/*.py
-./D-step.sh --help
-./BPP-step.sh --help
+conda env create -f environment.yml
+conda activate dbpp
+bash scripts/install_external.sh
+bash scripts/check_dependencies.sh
 ```
 
-The scripts use only the Python standard library; no Python package installation is required.
+`environment.yml` supplies Bash >=4.4, Python 3.10, Perl, SNP-sites 2.5.1, Newick Utilities 1.6, Git, Make, a C++ compiler, zlib, wget and tar. By default, `scripts/install_external.sh` installs the **release-pinned environment** used for D-BPP Workflow v1.2: **BPP 4.8.7** and **Dsuite 0.5 r58 at Git commit `a547f99599d763c1760548191ea3f62cc58e8ac3`**. Exact alternatives can be selected with the `BPP_VERSION` and `DSUITE_COMMIT` environment variables, and `--latest` is available for compatibility testing against the current BPP release and Dsuite HEAD. The installer records which mode and versions were actually installed. Run `DBPP_VERSION=v1.2 bash scripts/record_versions.sh` to save the exact executable paths, versions, and Dsuite revision used. See [`INSTALL.md`](INSTALL.md) for details and platform notes.
 
-A compact synthetic example is available in [`examples/minimal`](examples/minimal). It contains five 500-bp loci and two sampled individuals per ingroup species, and can be used to check input formatting and first-round BPP control-file generation. It is not a biological validation dataset.
+For exact reproduction of the v1.2 software environment, use the default installer with no version overrides:
+
+```bash
+bash scripts/install_external.sh
+```
+
+To test a specific newer BPP release without changing the v1.2 default, for example:
+
+```bash
+BPP_VERSION=4.9.0 bash scripts/install_external.sh
+```
+
+To test the current upstream external dependencies:
+
+```bash
+bash scripts/install_external.sh --latest
+```
+
+`--latest` is intentionally **not** the reproducibility default; it is a compatibility-testing mode and should be followed by the bundled dependency checks and automated tests before production analyses.
+
+A compact synthetic example is available in [`examples/`](examples/). It contains 20 aligned loci for three ingroup species and one outgroup and can be used to run the workflow from D-statistic screening through first-round MSci model construction. The example is intended for software verification rather than biological validation, assessment of statistical power, or MCMC convergence.
 
 The full datasets associated with the published *Panthera* and *Thuja* analyses are archived on [Dryad](https://doi.org/10.5061/dryad.47d7wm3sr).
 
@@ -160,6 +166,8 @@ Provide one semicolon-terminated Newick tree per non-comment line. Exclude the o
 ```
 
 ## Quick start
+
+The commands below use illustrative `data/...` paths for user-supplied datasets. For a copy-paste runnable example using the bundled synthetic data, see [`examples/README.md`](examples/README.md).
 
 ### 1. Screen candidate species trees with Dsuite
 
@@ -219,6 +227,7 @@ This creates:
 | `results/BPP-step/BPP.phy` | ingroup multi-locus PHYLIP generated from FASTA |
 | `results/BPP-step/BPP.imap` | BPP mapping without outgroup samples |
 | `round1.introgression` | tested event-to-ϕ-label mapping |
+| `round1.triple-state.tsv` | ranked-triple state ledger (`candidate`, `pending`, `explained`, or `tested`) |
 | `round1.msci` | BPP MSci-generator definitions |
 | `round1.ctl` | editable BPP control-file template |
 
@@ -241,16 +250,13 @@ Do not advance to another round until replicate chains, effective sample sizes, 
   --prefix results/BPP-step/round2 \
   --last_step results/BPP-step/round1 \
   --skip_validation \
-  --eps 0.01 \
   --b10_cutoff 100 \
   2> results/BPP-step/round2.log
 ```
 
-If another model is generated, edit its control file, run BPP, and repeat. The script returns exit status 0 for normal stopping conditions, including:
+If another model is generated, edit its control file, run BPP, and repeat. Every successive model contains all reticulations that remain supported after evaluation of the preceding model, plus the three candidates generated for the next eligible triple. A round in which none of those three newly introduced events passes the B₁₀ cutoff does **not** terminate the workflow or reset the network. Instead, the initiating triple is recorded as `tested`, its unsupported new events are removed, and the next highest-ranked significant triple that is neither currently explained nor previously tested is evaluated on the retained supported network.
 
-- none of the three newly added events passes the B₁₀ cutoff;
-- every significant *D*-statistic triple is explained; or
-- the *D*-statistic file contains no significant triple.
+Iteration stops only when no significant triple remains in the candidate queue. Thus, every significant triple has either been classified as explained by the currently supported network or individually evaluated. The round-specific `*.triple-state.tsv` file records this state explicitly. If unsupported events must be removed from the last evaluated model when the queue becomes empty, the reduced supported network is written as `final.msci`, `final.ctl`, and `final.introgression`; otherwise, the last evaluated model is reported as the final supported model. A `final.triple-state.tsv` record is written when the search is complete. If no introgression event is supported after all candidate triples have been evaluated, the final model is the input species tree without reticulations.
 
 Warnings about multiple events involving the same tree edge require manual revision of the `.msci` and `.introgression` files before inference.
 
@@ -260,50 +266,87 @@ Add `--fbranch` to a first or subsequent BPP-step command to search for a monoph
 
 ## B₁₀ calculation
 
-With the default BPP `phiprior = 1 1`, D-BPP approximates support for introgression as
+With the default BPP `phiprior = 1 1`, D-BPP uses the small-interval Savage-Dickey approximation
 
 ```text
-B₁₀ = ε / Pr(ϕ < ε | data).
+B₁₀,ε = Pr(ϕ < ε) / Pr(ϕ < ε | X) = ε / Pr(ϕ < ε | X).
 ```
 
-The workflow and standalone utility both default to `epsilon = 0.001`. In the worked examples below, we explicitly use `epsilon = 0.01`:
+`BPP-step.sh` uses `epsilon = 0.01` and `B10 cutoff = 100` by default; both are user-configurable with `--eps` and `--b10_cutoff`. If `phiprior` is changed from `1 1`, supply the corresponding prior probability with `--prior_mass` rather than using ε as the numerator.
+
+The standalone `cal_b10.py` utility reports both `epsilon = 0.01` and `epsilon = 0.001` by default, making the sensitivity of support to the near-zero interval explicit:
 
 ```bash
 python3 cal_b10.py \
   results/BPP-step/round1.mcmc.txt \
-  results/BPP-step/round1.b10.tsv \
-  --epsilon 0.01
+  results/BPP-step/round1.b10.tsv
 ```
 
-The shortcut assumes a Uniform(0, 1) prior. If `phiprior` is changed, the prior probability of the near-zero interval must be recalculated rather than replaced by ε.
+This creates a compact wide summary (`round1.b10.tsv`) and a long-format details table (`round1.b10.details.tsv`) containing the epsilon value, prior mass, posterior mass below epsilon, sample counts, B₁₀ and support classification. To evaluate only selected intervals, repeat `--epsilon`; for a non-Uniform phi prior, provide the prior interval mass explicitly, for example `--prior-mass 0.01=0.025`.
 
 ## Log marginal likelihood
 
-Use BPP to generate Gaussian-quadrature control files and run every power-posterior point:
+Marginal-likelihood comparison is optional. If only one candidate species tree is analyzed, the workflow ends with the final supported network for that topology. If multiple candidate species trees are considered, complete the full D-BPP iteration independently for each topology first, then compare the resulting final networks using the same sequence data and consistent priors for shared parameters.
+
+BPP generates Gaussian-quadrature power-posterior control files with `--bfdriver`. D-BPP v1.2 separates execution records from numerical results through four subcommands. Run each final network in its own working directory.
+
+### 1. Prepare integration points
 
 ```bash
-bpp --bfdriver model.ctl --points 16
+python3 cal_marginal_likelihoods.py prepare model.ctl \
+  --points 16 \
+  --run-dir marginal_likelihood_run
 ```
 
-After all runs finish, calculate
+This calls `bpp --bfdriver`, records the generated control files, and writes `bfdriver.log` plus `bfdriver_manifest.tsv` under the run-record directory.
+
+### 2. Run the power-posterior analyses
+
+```bash
+python3 cal_marginal_likelihoods.py run "model.b*.ctl" \
+  --jobs 1 \
+  --run-dir marginal_likelihood_run
+```
+
+The command stores screen logs under `marginal_likelihood_run/logs/` and writes a `run_manifest.tsv` containing the control file, log file, return code, elapsed time and UTC timestamps. Increase `--jobs` only when the requested BPP processes and their internal thread settings fit the available resources.
+
+### 3. Summarize one final network
+
+After all power-posterior runs finish, calculate
 
 ```text
 log p(X | M) ≈ 1/2 × sum(weight_i × E_beta_i[log p(X | theta)]).
 ```
 
 ```bash
-python3 cal_marginal_likelihoods.py \
+python3 cal_marginal_likelihoods.py summarize \
   model.ctl.betaweights.csv \
-  "model-*.out" \
-  model.log-marginal-likelihood.txt
+  --run-dir marginal_likelihood_run \
+  --label Tree1_final_network \
+  --output-dir marginal_likelihood_results
 ```
 
-The utility rejects missing or duplicate integration points, verifies that the Gauss-Legendre weights sum to 2, and matches rounded BPP beta values with an absolute tolerance of `1e-6`. Adjust the latter only when necessary with `--beta-tolerance`.
+By default, the summarizer reads the screen logs listed in `marginal_likelihood_run/run_manifest.tsv`, which is the output stream in which BPP reports `BFbeta` and `E_b(lnf(X))`. It rejects failed, missing or duplicate integration points, verifies the Gauss-Legendre weights, matches rounded BPP beta values within a configurable tolerance, and writes three result files: `integration_points.tsv`, `marginal_likelihood.tsv`, and `marginal_likelihood_report.txt`. A quoted output glob can still be supplied explicitly for externally generated runs, and older whitespace-delimited `betaweights.txt` files are also accepted.
+
+### 4. Compare final networks
+
+After summarizing each candidate species tree separately, compare the final networks with:
+
+```bash
+python3 cal_marginal_likelihoods.py compare \
+  tree1_results/marginal_likelihood.tsv \
+  tree2_results/marginal_likelihood.tsv \
+  --output-dir marginal_likelihood_comparison
+```
+
+The comparison table ranks models by log marginal likelihood and reports the log-marginal-likelihood difference from the best model. The older three-positional-argument calculator syntax remains available for backward compatibility.
 
 ## Testing
 
 ```bash
-bash -n D-step.sh BPP-step.sh upstream/annotation_curation/*.sh upstream/gene_content_tree/*.sh
+for f in D-step.sh BPP-step.sh scripts/*.sh upstream/annotation_curation/*.sh upstream/gene_content_tree/*.sh; do
+  bash -n "$f"
+done
 python3 -m py_compile cal_b10.py cal_marginal_likelihoods.py upstream/annotation_curation/scripts/*.py upstream/gene_content_tree/scripts/*.py
 python3 -m unittest discover -s tests -v
 ```
@@ -325,21 +368,14 @@ If you use D-BPP Workflow, please cite the software release used and the associa
 
 ### Software
 
-For analyses performed with the current release:
+Current release: **D-BPP Workflow v1.2**. The repository is connected to the all-versions Zenodo concept DOI [https://doi.org/10.5281/zenodo.22139143](https://doi.org/10.5281/zenodo.22139143). After v1.2 is archived, cite the **version-specific v1.2 DOI** shown on the Zenodo record; this DOI should also be used in the Bioinformatics manuscript.
 
-Yang Y, Pang X-X. 2026. *D-BPP Workflow*, version 1.1.0. Zenodo. [https://doi.org/10.5281/zenodo.22141179](https://doi.org/10.5281/zenodo.22141179)
-
-The all-versions concept DOI for D-BPP Workflow is [https://doi.org/10.5281/zenodo.22139143](https://doi.org/10.5281/zenodo.22139143). For reproducible analyses, cite the version-specific DOI corresponding to the release used.
-
-Previous archived release:
-
-- v1.0.1: [https://doi.org/10.5281/zenodo.22139144](https://doi.org/10.5281/zenodo.22139144)
+Repository citation metadata are provided in [`CITATION.cff`](CITATION.cff).
 
 ### Associated methods article
 
 Yang Y, Pang XX, Ding YM, Zhang BW, Bai WN, Zhang DY. 2026. Synergizing Bayesian and heuristic approaches: D-BPP uncovers ghost introgression in *Panthera* and *Thuja*. *Systematic Biology*, syag012. [https://doi.org/10.1093/sysbio/syag012](https://doi.org/10.1093/sysbio/syag012)
 
-Repository citation metadata are provided in [`CITATION.cff`](CITATION.cff).
 ## License and contact
 
 D-BPP Workflow is released under the [MIT License](LICENSE). Questions and reproducible bug reports can be sent to `yangy@mail.bnu.edu.cn` or opened through GitHub Issues.

@@ -305,7 +305,10 @@ if [[ -n "$FAS_DIR" ]]; then
         awk '
             /^>/ {
                 if (seen_header) print ""
-                print $0
+                header = substr($0, 2)
+                sub(/^[[:space:]]+/, "", header)
+                split(header, fields, /[[:space:]]+/)
+                print ">" fields[1]
                 seen_header = 1
                 next
             }
@@ -362,7 +365,12 @@ if [[ -n "$FAS_DIR" ]]; then
     for individual in "${INDIVIDUAL_LIST[@]}"; do
         echo ">$individual" >> "$CONCAT_FASTA"
         awk -v wanted="$individual" '
-            /^>/ { capture = (substr($0, 2) == wanted); next }
+            /^>/ {
+                name = substr($0, 2)
+                sub(/[[:space:]].*$/, "", name)
+                capture = (name == wanted)
+                next
+            }
             capture { printf "%s", $0; capture = 0 }
             END { print "" }
         ' "$TEMP_FASTA" >> "$CONCAT_FASTA"
@@ -472,7 +480,9 @@ while IFS= read -r tree || [[ -n "$tree" ]]; do
     fi
     
     head -n1 "$TEMP_FILE" > "$OUTPUT_FILE"
-    tail -n+2 "$TEMP_FILE" | sort -t$'\t' -k11,11nr >> "$OUTPUT_FILE"
+    DP_COL=$(head -n1 "$TEMP_FILE" | awk -F'\t' '{print NF - 1}')
+    [[ "$DP_COL" =~ ^[0-9]+$ && "$DP_COL" -gt 0 ]] || die "Could not identify the appended Dp column in '$TEMP_FILE'"
+    tail -n+2 "$TEMP_FILE" | sort -t$'\t' -k"${DP_COL},${DP_COL}nr" >> "$OUTPUT_FILE"
     
     rm -f "$TEMP_FILE"
     rm -f "${CURRENT_PREFIX}_BBAA"*

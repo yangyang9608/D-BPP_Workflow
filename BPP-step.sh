@@ -15,20 +15,22 @@ usage() {
     echo "  --imap <file>         Individual to species mapping file (tab-delimited)"
     echo "  --tree <file>         Species tree file: output *tree file from D-step.sh"
     echo "  --dstat <file>        D-statistic results file: output *sig-triples file from D-step.sh"
-    echo "  --prefix <prefix>     Output prefix for BPP files (assign unique names for each BPP analysis round, e.g., BPP-step/Sig-BPP-step1, BPP-step/Sig-BPP-step2...)"
+    echo "  --prefix <prefix>     Output prefix for the current candidate-model round. Round-specific triple state is written as <prefix>.triple-state.tsv; if the queue is exhausted after filtering, any required reduced final model is written as <same-directory>/final.*"
     echo ""
 	echo "Optional parameters:"
 	echo "  --last_step           Output prefix from the last step, for identifying the BPP output files"
-	echo "  --eps                 epsilon value for calculating the B10 value (Default: 0.001; only with --last_step)"
+	echo "  --eps                 epsilon value for calculating the B10 value (Default: 0.01; only with --last_step)"
+	echo "  --prior_mass          prior probability Pr(phi < epsilon); default equals epsilon under phiprior = 1 1"
+
 	echo "  --b10_cutoff          B10 cutoff for significant introgressions in BPP analysis (Default: 100; only with --last_step)"
     echo "  --skip_validation     Skip PHYLIP file format validation (only with --phylip_file)"
     echo "  --fbranch             Implement the fbranch rule for the consideration of ancestral gene flow"
 	echo ""
 	echo "############## Usage ############"
-	echo "First step:"     
+	echo "First step:"
 	echo "	bash $0 (--fasta_dir <fasta_directory> | --phylip_file <phylip_file>) --imap <imap_file> --tree <tree_file> --dstat <dstat_file> --prefix <output_prefix> [--fbranch]"
-	echo "Subsequent steps:" 
-	echo  "	bash $0 --phylip_file <phylip_file> --imap <imap_file> --tree <tree_file> --dstat <dstat_file> --prefix <output_prefix>  --last_step <output_prefix_of_last_step> --skip_validation  [--fbranch] [--eps <epsilon_value>] [--b10_cutoff <b10_cutoff_value>]"
+	echo "Subsequent steps:"
+	echo  "	bash $0 --phylip_file <phylip_file> --imap <imap_file> --tree <tree_file> --dstat <dstat_file> --prefix <output_prefix>  --last_step <output_prefix_of_last_step> --skip_validation  [--fbranch] [--eps <epsilon_value>] [--prior_mass <Pr(phi<epsilon)>] [--b10_cutoff <b10_cutoff_value>]"
 	echo ""
 	echo "############# Example ###########"
 	echo "bash $0 --fasta_dir ./fasta_dir/ --imap test.imap --tree D-step/Sig-D-Tree1.tree --dstat D-step/Sig-D-Tree1.sig-triples --prefix BPP-step/Sig-BPP-step1 2> BPP-step/Sig-BPP-step1.log"
@@ -59,7 +61,9 @@ fi
 
 SKIP_VALIDATION=false
 FBRANCH=false
-EPS=0.001
+EPS=0.01
+PRIOR_MASS=""
+PRIOR_MASS_EXPLICIT=false
 B10_CUTOFF=100
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -109,6 +113,12 @@ while [[ $# -gt 0 ]]; do
 			echo "WARNING: --esp is deprecated; use --eps" >&2
 			shift 2
 			;;
+		--prior_mass|--prior-mass)
+			require_value "$1" "${2-}"
+			PRIOR_MASS="$2"
+			PRIOR_MASS_EXPLICIT=true
+			shift 2
+			;;
 		--b10_cutoff)
 			require_value "$1" "${2-}"
 			B10_CUTOFF="$2"
@@ -116,7 +126,7 @@ while [[ $# -gt 0 ]]; do
 			;;
 		--skip_validation)
             SKIP_VALIDATION=true
-            shift 
+            shift
             ;;
 		--fbranch)
 			FBRANCH=true
@@ -164,14 +174,17 @@ if [[ -n "${LAST_STEP+x}" ]]; then
     if [[ -z "$LAST_STEP" ]]; then
         die "Missing --last_step value"
     fi
-    if [[ ! -f "${LAST_STEP}.introgression" ]] || [[ ! -f "${LAST_STEP}.mcmc.txt" ]]; then
-        echo "ERROR: Required files not found:" >&2
-        [[ ! -f "${LAST_STEP}.introgression" ]] && echo "  - ${LAST_STEP}.introgression" >&2 
+    if [[ ! -f "${LAST_STEP}.introgression" ]] || [[ ! -f "${LAST_STEP}.mcmc.txt" ]] || [[ ! -f "${LAST_STEP}.triple-state.tsv" ]]; then
+        echo "ERROR: Required continuation files not found:" >&2
+        [[ ! -f "${LAST_STEP}.introgression" ]] && echo "  - ${LAST_STEP}.introgression" >&2
         [[ ! -f "${LAST_STEP}.mcmc.txt" ]] && echo "  - ${LAST_STEP}.mcmc.txt" >&2
+        [[ ! -f "${LAST_STEP}.triple-state.tsv" ]] && echo "  - ${LAST_STEP}.triple-state.tsv" >&2
+        echo "Continuation rounds require the triple-state file written by this D-BPP release. Regenerate the preceding candidate round if necessary." >&2
         exit 1
     fi
 	INTR_FILE=${LAST_STEP}.introgression
 	MCMC_FILE=${LAST_STEP}.mcmc.txt
+	PREV_TRIPLE_STATE_FILE=${LAST_STEP}.triple-state.tsv
 fi
 
 if ! [[ "$EPS" =~ ^[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; then
@@ -179,6 +192,30 @@ if ! [[ "$EPS" =~ ^[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; then
 fi
 awk -v value="$EPS" 'BEGIN { exit !(value > 0 && value < 1) }' || \
     die "--eps must be greater than 0 and less than 1 (received '$EPS')"
+
+if [[ "$PRIOR_MASS_EXPLICIT" == false ]]; then
+    PRIOR_MASS="$EPS"
+fi
+if ! [[ "$PRIOR_MASS" =~ ^[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; then
+    die "--prior_mass must be numeric (received '$PRIOR_MASS')"
+fi
+awk -v value="$PRIOR_MASS" 'BEGIN { exit !(value > 0 && value <= 1) }' || \
+    die "--prior_mass must be greater than 0 and no greater than 1 (received '$PRIOR_MASS')"
+
+if [[ -n "${LAST_STEP+x}" && "$PRIOR_MASS_EXPLICIT" == false && -f "${LAST_STEP}.ctl" ]]; then
+    PHIPRIOR_LINE=$(awk '
+        /^[[:space:]]*phiprior[[:space:]]*=/ {
+            sub(/^[[:space:]]*phiprior[[:space:]]*=[[:space:]]*/, "")
+            sub(/[[:space:]]*\*.*/, "")
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+            print
+            exit
+        }
+    ' "${LAST_STEP}.ctl")
+    if [[ -n "$PHIPRIOR_LINE" && ! "$PHIPRIOR_LINE" =~ ^1([.]0+)?[[:space:]]+1([.]0+)?$ ]]; then
+        die "The preceding control file uses phiprior='$PHIPRIOR_LINE'. Supply --prior_mass Pr(phi<epsilon) for the chosen epsilon; the Uniform(0,1) shortcut prior_mass=epsilon is not valid for a changed phi prior."
+    fi
+fi
 
 if ! [[ "$B10_CUTOFF" =~ ^[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; then
     die "--b10_cutoff must be numeric (received '$B10_CUTOFF')"
@@ -193,6 +230,42 @@ done
 PREFIX_DIR=$(dirname "$PREFIX")
 mkdir -p "$PREFIX_DIR" || die "Failed to create output directory '$PREFIX_DIR'"
 
+# Track significant triples that have already been individually evaluated.
+# Triples classified as explained are recalculated from the currently supported
+# network at every round and are therefore not treated as permanent state.
+declare -A TESTED_TRIPLES
+LAST_ANCHOR_TRIPLE=""
+if [[ -n "${LAST_STEP+x}" ]]; then
+    state_line=0
+    while IFS=$'\t' read -r p1 p2 p3 status extra || [[ -n "$p1$p2$p3$status$extra" ]]; do
+        ((state_line++))
+        if [[ $state_line -eq 1 ]]; then
+            [[ "$p1" == "P1" && "$p2" == "P2" && "$p3" == "P3" && "$status" == "status" && -z "$extra" ]] || \
+                die "Malformed triple-state header in '$PREV_TRIPLE_STATE_FILE'; expected: P1<TAB>P2<TAB>P3<TAB>status"
+            continue
+        fi
+        [[ -z "$p1$p2$p3$status$extra" ]] && continue
+        [[ -n "$p1" && -n "$p2" && -n "$p3" && -n "$status" && -z "$extra" ]] || \
+            die "Malformed triple-state row $state_line in '$PREV_TRIPLE_STATE_FILE'"
+        triple_id="$p1,$p2,$p3"
+        case "$status" in
+            tested)
+                TESTED_TRIPLES["$triple_id"]=1
+                ;;
+            candidate)
+                [[ -z "$LAST_ANCHOR_TRIPLE" ]] || die "Multiple candidate triples were found in '$PREV_TRIPLE_STATE_FILE'"
+                LAST_ANCHOR_TRIPLE="$triple_id"
+                ;;
+            pending|explained)
+                # Recompute these states below using the current supported network.
+                ;;
+            *)
+                die "Unknown triple state '$status' in '$PREV_TRIPLE_STATE_FILE'"
+                ;;
+        esac
+    done < "$PREV_TRIPLE_STATE_FILE"
+    [[ -n "$LAST_ANCHOR_TRIPLE" ]] || die "No candidate triple was recorded in '$PREV_TRIPLE_STATE_FILE'"
+fi
 
 step=1
 #============================================================
@@ -250,9 +323,9 @@ LOCUS_COUNT=0
 
 if [[ -n "$FASTA_DIR" ]]; then
     echo "FASTA directory: $FASTA_DIR" >&2
-    
+
 	> "$SEQ_FILE"
-	
+
 		FASTA_FILE_COUNT=0
 		for fasta_file in "$FASTA_DIR"/*.fasta "$FASTA_DIR"/*.fa "$FASTA_DIR"/*.fas; do
 		    if [[ ! -f "$fasta_file" ]]; then
@@ -263,10 +336,10 @@ if [[ -n "$FASTA_DIR" ]]; then
 		    declare -A SEQUENCES=()
 		    TOTAL_INGROUP_INDIVS=0
 		    SEQUENCE_LENGTH=0
-	    
+
 	    CURRENT_INDIV=""
 	    CURRENT_SEQ=""
-	    
+
 		    while IFS= read -r line || [[ -n "$line" ]]; do
 		        if [[ "$line" =~ ^\> ]]; then
 		            if [[ -n "$CURRENT_INDIV" ]]; then
@@ -279,7 +352,7 @@ if [[ -n "$FASTA_DIR" ]]; then
 		                    die "Sequences are not aligned to a common length in '$fasta_file'"
 		                fi
 		            fi
-	            
+
 	            CURRENT_INDIV="${line:1}"
 		            CURRENT_INDIV="${CURRENT_INDIV%%[[:space:]]*}"
 		            [[ -n "$CURRENT_INDIV" ]] || die "Empty FASTA identifier in '$fasta_file'"
@@ -312,27 +385,27 @@ if [[ -n "$FASTA_DIR" ]]; then
 	            fi
 	        done
 	    done
-	    
+
 		    if [[ $TOTAL_INGROUP_INDIVS -lt 2 ]]; then
 		        echo "SKIP $(basename "$fasta_file"): only $TOTAL_INGROUP_INDIVS ingroup individual(s) found (minimum 2 required)" >&2
 		        unset SEQUENCES INGROUP_DATA
 		        continue
 	    fi
-	    
+
 	    {
 	        # PHYLIP header: <number_of_sequences> <sequence_length>
 	        echo " $TOTAL_INGROUP_INDIVS $SEQUENCE_LENGTH"
-	        
+
 	        for ((i=0; i<${#INGROUP_DATA[@]}; i+=2)); do
 	            SEQ_NAME="${INGROUP_DATA[i]}"
 	            SEQ_DATA="${INGROUP_DATA[i+1]}"
-	            
+
 		            printf "%s  %s\n" "$SEQ_NAME" "$SEQ_DATA"
 	        done
 	    } >> "$SEQ_FILE"
-	    
+
 	    LOCUS_COUNT=$((LOCUS_COUNT + 1))
-	    
+
 	    unset SEQUENCES
 	    unset INGROUP_DATA
 		done
@@ -413,15 +486,15 @@ if [[ -f "$TREE_FILE" ]]; then
 		new_tree=""
 		i=0
 		len=${#tree}
-		
+
 		while [ $i -lt $len ]; do
 		    char=${tree:$i:1}
 		    new_tree+="$char"
-		
+
 		    if [ "$char" = ")" ]; then
 		        ((i++))
 		        next_char=${tree:$i:1}
-		
+
 		        if [[ "$next_char" =~ ^[\),\;]$ ]]; then
 		            new_tree+="N${node_id}"
 		            ((node_id++))
@@ -443,23 +516,23 @@ fi
 # function for getting the parental node for a given node
 find_parent_node() {
 	local topo="$1"
-	local node="$2"			
+	local node="$2"
 
 	local right_topo=$(echo "$topo" | perl -spe 's/.*([,()])\Q$node\E([,()\;].*)/$2/' -- -node="$node")
 
-	local num_left=0    
-    local num_right=0   
-    local p_node=""     
-    local collecting=0  
-    
+	local num_left=0
+    local num_right=0
+    local p_node=""
+    local collecting=0
+
     for ((i=0; i<${#right_topo}; i++)); do
         local char="${right_topo:$i:1}"
-        
+
         if [[ "$char" == "(" ]]; then
             ((num_left++))
         elif [[ "$char" == ")" ]]; then
             ((num_right++))
-            
+
             if [[ $num_right -gt $num_left && $collecting -eq 0 ]]; then
 				collecting=1
 				continue
@@ -475,23 +548,23 @@ find_parent_node() {
     done
 
 	echo "$p_node"
-} 
+}
 #find_parent_node "$new_tree" "N4"
 
 # function for getting the children node for a given node
 find_children_node() {
 	local topo="$1"
-	local node="$2"			
+	local node="$2"
 
 	local left_topo=$(echo "$topo" | perl -spe 's/(.*[,()])\Q$node\E([,()\;].*)/$1/' -- -node="${node}")
 
-	local num_left=0    
-    local num_right=0   
-    local c_node1=""     
-    local c_node2=""     
-    local collecting1=1  
-    local collecting2=0  
-   	
+	local num_left=0
+    local num_right=0
+    local c_node1=""
+    local c_node2=""
+    local collecting1=1
+    local collecting2=0
+
 	if [[ "${left_topo: -1}" == ")" ]]; then
 	    for ((i=1; i<${#left_topo}; i++)); do
 			local j=$((${#left_topo}-1-$i))
@@ -508,7 +581,7 @@ find_children_node() {
 					continue
 				fi
 			fi
-			
+
 			if [[ $collecting2 -eq 1 ]]; then
 	            if [[ "$char" != ")" && "$char" != "," && "$char" != "(" && "$char" != ";" ]]; then
 	                c_node2="${char}${c_node2}"
@@ -517,7 +590,7 @@ find_children_node() {
 					break
 	            fi
 	        fi
-	
+
 	        if [[ "$char" == "(" ]]; then
 	            ((num_left++))
 	            if [[ $num_right -lt $num_left ]]; then
@@ -533,13 +606,13 @@ find_children_node() {
 
 	local child=($c_node1 $c_node2)
 	echo "${child[@]}"
-} 
+}
 #find_children_node "(Ghost1,((Ghost2,((A,B)N1,C)N2)N6,(D,E)N3)N4)N5;" "N6"
 
 # function for getting the hybrid cycle for a given introgression
 find_cycle() {
 	local tree=$1
-	local int=$2	
+	local int=$2
 	[[ "$int" =~ .*/(.*)\<--.*/(.*) ]]
 	local node1=${BASH_REMATCH[1]}
 	local node2=${BASH_REMATCH[2]}
@@ -602,7 +675,7 @@ explained_triples() {
 	local hybrid_leaf=""
 	local hybrid_side_order=()
 	local donor_side_order=()
-	
+
 	# parse input
 	local OLDIFS="$IFS"
 	IFS=$'\n'
@@ -611,11 +684,11 @@ explained_triples() {
 			section=1
 			continue
 		fi
-		
+
 		if [[ "$line" =~ ^([^:]+):[[:space:]]*(.+)$ ]]; then
 			node="${BASH_REMATCH[1]}"
 			leaves="${BASH_REMATCH[2]}"
-			
+
 			if [[ $section -eq 0 ]]; then
 				# hybrid side
 				if [[ -z "$hybrid_node" ]]; then
@@ -634,14 +707,14 @@ explained_triples() {
 			fi
 		fi
 	done <<< "$input"
-	
+
 	IFS="$OLDIFS"
 
 	# generate explained triples
-	local explained_triples=()	
+	local explained_triples=()
 	IFS=' ' read -ra hybrid_node_leaves <<< "${hybrid_side[$hybrid_node]}"
-	
-	# triple: 1-H-2 
+
+	# triple: 1-H-2
 	for hybrid_leaf in "${hybrid_node_leaves[@]}"; do
 		for h_node in "${hybrid_side_order[@]}"; do
 			IFS=' ' read -ra h_leaves <<< "${hybrid_side[$h_node]}"
@@ -655,7 +728,7 @@ explained_triples() {
 			done
 		done
 	done
-	
+
 	# triple: H-1-1
 	for hybrid_leaf in "${hybrid_node_leaves[@]}"; do
 		for ((i=0; i<${#hybrid_side_order[@]}; i++)); do
@@ -671,7 +744,7 @@ explained_triples() {
 				done
 			done
 		done
-	done	
+	done
 
 	# triple: 2-2-H
 	for hybrid_leaf in "${hybrid_node_leaves[@]}"; do
@@ -689,8 +762,112 @@ explained_triples() {
 			done
 		done
 	done
-	
-	echo "${explained_triples[@]}"	
+
+	echo "${explained_triples[@]}"
+}
+
+# Collapse unary internal nodes that can remain after pruning an unsupported
+# ghost lineage. Newick Utilities' nw_prune preserves the now-unary wrapper
+# node (for example (((A,B)N1,C)N2)N3;), but BPP --msci-create requires the
+# species tree itself to remain a proper branching topology.
+# Internal labels on retained branching nodes are preserved; labels belonging
+# only to collapsed unary wrappers are discarded.
+collapse_unary_newick() {
+    local tree="$1"
+    python - "$tree" <<'PY_COLLAPSE'
+import sys
+
+s = sys.argv[1].strip()
+if not s.endswith(';'):
+    raise SystemExit('Newick tree must end with a semicolon')
+
+class Node:
+    __slots__ = ('children', 'label', 'length')
+    def __init__(self, children=None, label='', length=''):
+        self.children = children or []
+        self.label = label
+        self.length = length
+
+i = 0
+n = len(s)
+
+def skip_ws():
+    global i
+    while i < n and s[i].isspace():
+        i += 1
+
+def read_token(stoppers):
+    global i
+    skip_ws()
+    start = i
+    while i < n and s[i] not in stoppers and not s[i].isspace():
+        i += 1
+    token = s[start:i]
+    skip_ws()
+    return token
+
+def read_length():
+    global i
+    skip_ws()
+    if i < n and s[i] == ':':
+        i += 1
+        return read_token(',();')
+    return ''
+
+def parse_subtree():
+    global i
+    skip_ws()
+    if i >= n:
+        raise ValueError('Unexpected end of Newick tree')
+    if s[i] == '(':
+        i += 1
+        children = [parse_subtree()]
+        skip_ws()
+        while i < n and s[i] == ',':
+            i += 1
+            children.append(parse_subtree())
+            skip_ws()
+        if i >= n or s[i] != ')':
+            raise ValueError("Expected ')' in Newick tree")
+        i += 1
+        label = read_token(':,();')
+        length = read_length()
+        return Node(children, label, length)
+    label = read_token(':,();')
+    if not label:
+        raise ValueError('Missing leaf label in Newick tree')
+    length = read_length()
+    return Node([], label, length)
+
+root = parse_subtree()
+skip_ws()
+if i >= n or s[i] != ';':
+    raise ValueError("Expected ';' at end of Newick tree")
+
+def collapse(node):
+    node.children = [collapse(child) for child in node.children]
+    if len(node.children) == 1:
+        child = node.children[0]
+        # D-BPP uses the candidate tree topology rather than branch lengths.
+        # Preserve a wrapper length only if the retained child has none.
+        if not child.length and node.length:
+            child.length = node.length
+        return child
+    return node
+
+root = collapse(root)
+
+def emit(node):
+    if node.children:
+        out = '(' + ','.join(emit(c) for c in node.children) + ')' + node.label
+    else:
+        out = node.label
+    if node.length:
+        out += ':' + node.length
+    return out
+
+print(emit(root) + ';')
+PY_COLLAPSE
 }
 
 # read BPP output files in the last step
@@ -698,7 +875,11 @@ declare -A adding_intro
 declare -a adding_intro_sort
 
 # function for constructing the ctl file
+# Usage: ctl_con [round|final]
+#   round (default): construct the next candidate-model control file.
+#   final: construct a reduced final-model control file after the search stage ends.
 ctl_con() {
+	local output_mode="${1:-round}"
 	declare -g -a msci_command
 	declare -g -a intr_log
 	declare -g -A conflicting
@@ -708,7 +889,7 @@ ctl_con() {
 	intr_log=()
 	conflicting=()
 	warning=()
-	#arrange introgression edges to the backbone tree
+	#arrange introgression edges to the species tree
 	for key in "${adding_intro_sort[@]}"; do
 		[[ $key =~ ^(.+)/([^<]+)(<?)--\>(.+)/(.+)$ ]] || die "Could not parse introgression edge '$key'"
 		n1=${BASH_REMATCH[1]}
@@ -716,7 +897,7 @@ ctl_con() {
 	    if_bi=${BASH_REMATCH[3]}
 	    n3=${BASH_REMATCH[4]}
 	    n4=${BASH_REMATCH[5]}
-	
+
 		if [[ -z ${conflicting[$n2]} ]];then
 			conflicting[$n2]=$n2
 		else
@@ -727,7 +908,7 @@ ctl_con() {
 		else
 			warning+=("Warning: multiple introgression edges involve the tree edge $n3/$n4, please check and adjust the ${PREFIX}.msci and ${PREFIX}.introgression")
 		fi
-		
+
 		if [[ -z $if_bi ]];then
 			command="hybridization $n1 ${conflicting[$n2]}, $n3 ${conflicting[$n4]} as Z$((hybrid_id + 1)) Z$((hybrid_id + 2)) tau=no, yes phi=0.10"
 			type="hybridization"
@@ -738,10 +919,10 @@ ctl_con() {
 			intr_log+=("	$n3/$n4<--$n1/$n2: Z$((hybrid_id + 2))<-Z$((hybrid_id + 1))")
 			intr_log+=("	$n1/$n2<--$n3/$n4: Z$((hybrid_id + 1))<-Z$((hybrid_id + 2))")
 		fi
-	
+
 		conflicting[$n2]="Z$((hybrid_id + 1))"
 		conflicting[$n4]="Z$((hybrid_id + 2))"
-			
+
 		((hybrid_id += 2))
 		msci_command+=("$command")
 		echo "$type: $key" >&2
@@ -750,18 +931,24 @@ ctl_con() {
 	declare -g merged_warning=$(printf "%s\n" "${warning[@]}")
 	declare -g merged_intr_log=$(printf "%s\n" "${intr_log[@]}")
 	[[ "$merged_warning" ]] && echo "" >&2 && echo "$merged_warning" >&2
-	
+
 	declare -g MSCI_FILE=${PREFIX}.msci
 	cat > "$MSCI_FILE" << EOF
 tree $new_tree
 $merged_command
 EOF
-	if ! MSCI_OUTPUT=$(bpp --msci-create "$MSCI_FILE" 2>&1); then
-		printf '%s\n' "$MSCI_OUTPUT" >&2
-		die "BPP could not construct an MSCI model from '$MSCI_FILE'"
+	if [[ ${#msci_command[@]} -eq 0 ]]; then
+		# A tree-only final model is already valid BPP Newick and does not need
+		# conversion through --msci-create.
+		MODEL="$new_tree"
+	else
+		if ! MSCI_OUTPUT=$(bpp --msci-create "$MSCI_FILE" 2>&1); then
+			printf '%s\n' "$MSCI_OUTPUT" >&2
+			die "BPP could not construct an MSCI model from '$MSCI_FILE'"
+		fi
+		MODEL=$(printf '%s\n' "$MSCI_OUTPUT" | tail -n 1)
+		[[ -n "$MODEL" && ! "$MODEL" =~ ^Processing ]] || die "BPP did not return a valid MSCI model for '$MSCI_FILE'"
 	fi
-	MODEL=$(printf '%s\n' "$MSCI_OUTPUT" | tail -n 1)
-	[[ -n "$MODEL" && ! "$MODEL" =~ ^Processing ]] || die "BPP did not return a valid MSCI model for '$MSCI_FILE'"
 
 	################generate ctl file##################
 	CTL_FILE="${PREFIX}.ctl"
@@ -786,28 +973,28 @@ EOF
 	line1="$S ${ctl_species[*]}"
 	line2="${sample_counts[*]}"
 	PHASE="${phase_values[*]}"
-	
+
 	cat > "$CTL_FILE" << EOF
 	          seed =  -1
-	
+
 	       seqfile = $SEQ_FILE
 	      Imapfile = $IMAP_BPP
 	       jobname = ${PREFIX}
-	
+
 	 speciesdelimitation = 0
 	         speciestree = 0
-	
+
 	  species&tree = $line1
 	                   $line2
 	                 $MODEL
 	       usedata = 1
 	         nloci = $LOCUS_COUNT *The number can be reduced to use fewer loci
 	         phase = $PHASE *Need to adjust according to your specific data situation
-	
+
 	    thetaprior = gamma 2 200  *Gamma(α,β) with the mean of α/β, The value of β can be adjusted to bring the mean into a reasonable range
 	      tauprior = gamma 2 67 *Root time, Gamma(α,β) with the mean of α/β, The value of β can be adjusted to bring the mean into a reasonable range.
 	      phiprior = 1 1
-	
+
 	      finetune =  1
 	       *Threads = 8 19 1
 	         print = 1 0 0 0
@@ -816,11 +1003,16 @@ EOF
 	       nsample = 300000 * Need to adjust according to your data size and the number of specified introgression events
 EOF
 	echo "" >&2
-	echo "Control file for BPP: $CTL_FILE" >&2
-	echo "Note: Remember to edit the $CTL_FILE file and adjust the parameter settings: nloci, phase, Threads, thetaprior, tauprior, burnin, nsample!" >&2
-	echo "" >&2
-	echo "=================================================" >&2
-	echo "The next command: bpp --cfile $CTL_FILE" >&2
+	if [[ "$output_mode" == "final" ]]; then
+		echo "Final BPP control file: $CTL_FILE" >&2
+		echo "Note: Review the final control file and adjust nloci, phase, Threads, priors, burnin, and nsample before final parameter estimation." >&2
+	else
+		echo "Control file for BPP: $CTL_FILE" >&2
+		echo "Note: Remember to edit the $CTL_FILE file and adjust the parameter settings: nloci, phase, Threads, thetaprior, tauprior, burnin, nsample!" >&2
+		echo "" >&2
+		echo "=================================================" >&2
+		echo "The next command: bpp --cfile $CTL_FILE" >&2
+	fi
 }
 
 #: <<'NOTE'
@@ -841,11 +1033,11 @@ if [[ -n "${LAST_STEP+x}" ]]; then
 	        in_intro=true
 	        continue
 	    fi
-	    
+
 	    if [[ "$in_intro" != true ]]; then
 	        continue
 	    fi
-	    
+
 	    if [[ "$line" =~ ^[[:space:]]*(.+):[[:space:]]*(.+)$ ]]; then
 	        label="${BASH_REMATCH[2]}"
 	        event="${BASH_REMATCH[1]}"
@@ -856,7 +1048,7 @@ if [[ -n "${LAST_STEP+x}" ]]; then
 	[[ -n "$new_tree" ]] || die "No 'tree:' entry was found in '$INTR_FILE'"
 	[[ ${#intr[@]} -gt 0 ]] || die "No introgression entries were found in '$INTR_FILE'"
 
-	#check whether the mcmc file  is empty 
+	#check whether the mcmc file  is empty
 	data_lines=$(awk 'NR > 1 && NF { count++ } END { print count + 0 }' "$MCMC_FILE")
 	if [[ $data_lines -eq 0 ]]; then
 		die "No data rows were found in '$MCMC_FILE' after the header"
@@ -864,42 +1056,97 @@ if [[ -n "${LAST_STEP+x}" ]]; then
 	# read the header of the mcmc file
 	if IFS= read -r header < "$MCMC_FILE"; then
 	declare -A col_to_label
+	declare -A label_to_col
 	read -ra columns <<< "$header"
 	for idx in "${!columns[@]}"; do
 		col="${columns[$idx]}"
 		if [[ "$col" == phi:* ]]; then
 			label="${col##*:}"
-			col_to_label[$((idx+1))]="$label"
 		elif [[ "$col" == phi_* ]]; then
 			label="${col#phi_}"
-			col_to_label[$((idx+1))]="$label"
+		else
+			continue
 		fi
+		[[ -n "$label" ]] || die "Empty phi label in column '$col' of '$MCMC_FILE'"
+		[[ -z "${label_to_col[$label]+x}" ]] || die "Duplicate phi label '$label' in '$MCMC_FILE'"
+		col_to_label[$((idx+1))]="$label"
+		label_to_col["$label"]=$((idx+1))
 	done
 	fi
 	[[ ${#col_to_label[@]} -gt 0 ]] || die "No phi columns were found in '$MCMC_FILE'"
 
+	# Require a one-to-one mapping between every event in the introgression
+	# record and a posterior phi column in the BPP MCMC table. Without this
+	# reverse check, an untested event could otherwise be carried forward.
+	for label in "${!intr[@]}"; do
+		[[ -n "${label_to_col[$label]+x}" ]] || die "Introgression event '$label' in '$INTR_FILE' has no matching phi column in '$MCMC_FILE'"
+	done
+
+	# Validate every non-empty posterior row before any B10 filtering. BPP phi
+	# values are probabilities and therefore must be finite numeric values in
+	# [0,1]; malformed row lengths are rejected rather than partially parsed.
+	HEADER_FIELD_COUNT=${#columns[@]}
+	mapfile -t PHI_COLUMN_INDICES < <(printf '%s\n' "${!col_to_label[@]}" | sort -n)
+	PHI_INDEX_CSV=$(IFS=,; echo "${PHI_COLUMN_INDICES[*]}")
+	if ! MCMC_VALIDATION_ERROR=$(awk -v expected="$HEADER_FIELD_COUNT" -v phi_indices="$PHI_INDEX_CSV" '
+		BEGIN {
+			nphi = split(phi_indices, idx, ",")
+			numeric_re = "^[-+]?(([0-9]+([.][0-9]*)?)|([.][0-9]+))([eE][-+]?[0-9]+)?$"
+		}
+		NR == 1 { next }
+		NF == 0 { next }
+		{
+			if (NF != expected) {
+				printf "line %d has %d fields; expected %d", NR, NF, expected
+				failed = 1
+				exit 1
+			}
+			for (j = 1; j <= nphi; j++) {
+				field = idx[j]
+				value = $(field)
+				if (value !~ numeric_re) {
+					printf "line %d phi column %d contains a non-numeric or non-finite value: %s", NR, field, value
+					failed = 1
+					exit 1
+				}
+				numeric = value + 0
+				if (numeric < 0 || numeric > 1) {
+					printf "line %d phi column %d contains a value outside [0,1]: %s", NR, field, value
+					failed = 1
+					exit 1
+				}
+			}
+			rows++
+		}
+		END {
+			if (!failed && rows == 0) {
+				print "no posterior data rows were found after the header"
+				exit 1
+			}
+		}
+	' "$MCMC_FILE"); then
+		die "Invalid BPP MCMC table '$MCMC_FILE': $MCMC_VALIDATION_ERROR"
+	fi
+
 	# calculate B10 and delete non-sig introgressions
+	echo "B10 settings: epsilon=$EPS; prior_mass=$PRIOR_MASS; cutoff=$B10_CUTOFF" >&2
 	declare -A nonsig_int
 	echo "Tree including ghost lineages: $new_tree" >&2
 	echo "Supported introgression events in the last step:" >&2
 	for i in "${!col_to_label[@]}"; do
 		label="${col_to_label[$i]}"
 		[[ -n "${intr[$label]}" ]] || die "Phi column '$label' has no matching entry in '$INTR_FILE'"
-		B10=$(awk -v e="$EPS" -v i="$i" '
+		B10=$(awk -v e="$EPS" -v pm="$PRIOR_MASS" -v i="$i" '
 			NR > 1 && NF {
-				value = $i
-				if (value ~ /^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$/) {
-					valid++
-					if (value < e) below++
-				}
+				value = $i + 0
+				valid++
+				if (value < e) below++
 			}
 			END {
-				if (valid == 0) print "NA"
-				else if (below == 0) print "INF"
-				else printf "%.10g", e / (below / valid)
+				if (below == 0) print "INF"
+				else printf "%.10g", pm / (below / valid)
 			}
 		' "$MCMC_FILE")
-		[[ "$B10" != "NA" ]] || die "Phi column '$label' contains no numeric posterior samples"
 		if [[ "$B10" != "INF" ]] && awk -v value="$B10" -v cutoff="$B10_CUTOFF" 'BEGIN { exit !(value < cutoff) }'; then
 			nonsig_int["${intr[$label]}"]=1
 			unset 'intr[$label]'
@@ -907,18 +1154,14 @@ if [[ -n "${LAST_STEP+x}" ]]; then
 		[[ -n "${intr[$label]}" ]] && printf "%-30s B10:%-10s\n" "$label(${intr[$label]})" "$B10" >&2
 	done
 
-	for i in "${!intr_sort[@]}"; do
-		[[ -n "${intr["${intr_sort[$i]}"]}" ]] && first=$i && break 
-	done
-	if [[ -z "$first" || $first -gt 2 ]]; then
-		echo "Workflow complete: none of the three events added in the last round passed the B10 cutoff." >&2
-		echo "Use the supported model from the preceding round." >&2
-		exit 0
-	fi
-
 	for key in "${!nonsig_int[@]}"; do
 		if [[ $key =~ (Ghost.*$) ]]; then
-			new_tree=$(echo "$new_tree" |nw_prune - "${BASH_REMATCH[1]}")
+			ghost_to_prune="${BASH_REMATCH[1]}"
+			pruned_tree=$(printf '%s\n' "$new_tree" | nw_prune - "$ghost_to_prune")
+			[[ -n "$pruned_tree" ]] || die "Pruning unsupported ghost lineage '$ghost_to_prune' produced an empty species tree"
+			if ! new_tree=$(collapse_unary_newick "$pruned_tree"); then
+				die "Could not normalize the species tree after pruning unsupported ghost lineage '$ghost_to_prune'"
+			fi
 		fi
 	done
 
@@ -926,7 +1169,7 @@ if [[ -n "${LAST_STEP+x}" ]]; then
 	declare -A explained_triples
 	for key in "${!intr[@]}"; do
 		int=${intr[$key]}
-		cycle=$(find_cycle "$new_tree" "$int")	
+		cycle=$(find_cycle "$new_tree" "$int")
 		out=$(explained_triples "$cycle")
 		IFS=' ' read -ra tris <<< "$out"
 		for t in "${tris[@]}"; do
@@ -942,19 +1185,43 @@ if [[ -n "${LAST_STEP+x}" ]]; then
         n2=${BASH_REMATCH[2]}
         n3=${BASH_REMATCH[3]}
         n4=${BASH_REMATCH[4]}
-        if [[ $n4 =~ ^Ghost ]]; then 
+        if [[ $n4 =~ ^Ghost ]]; then
             adding_intro["$n3/$n4-->$n1/$n2"]=1
-        else 
-            if [[ -n ${adding_intro["$n1/$n2-->$n3/$n4"]} ]]; then 
+        else
+            if [[ -n ${adding_intro["$n1/$n2-->$n3/$n4"]} ]]; then
                 unset adding_intro["$n1/$n2-->$n3/$n4"]
                 adding_intro["$n3/$n4<-->$n1/$n2"]=1
-            else 
+            else
                 adding_intro["$n3/$n4-->$n1/$n2"]=1
-            fi   
-        fi   
-    done 
-	mapfile -t adding_intro_sort < <(printf '%s\n' "${!adding_intro[@]}" | LC_ALL=C sort)
-	
+            fi
+        fi
+    done
+	if [[ ${#adding_intro[@]} -gt 0 ]]; then
+		mapfile -t adding_intro_sort < <(printf '%s\n' "${!adding_intro[@]}" | LC_ALL=C sort)
+	else
+		adding_intro_sort=()
+	fi
+
+	# The last candidate round always adds exactly three directed events:
+	# ghost->P1 and the two directions of the sampled-lineage bidirection.
+	# intr_sort is reverse file order, so these are its first three labels.
+	[[ ${#intr_sort[@]} -ge 3 ]] || die "Expected at least three introgression events in '$INTR_FILE' to identify the most recently introduced candidates"
+	new_supported_count=0
+	for ((i = 0; i < 3; i++)); do
+		label="${intr_sort[$i]}"
+		[[ -n "${intr[$label]+x}" ]] && ((new_supported_count++))
+	done
+
+	# The initiating triple from the evaluated round is now individually tested,
+	# regardless of whether any of its newly introduced events passed the cutoff.
+	TESTED_TRIPLES["$LAST_ANCHOR_TRIPLE"]=1
+	CURRENT_SUPPORTED_DIRECTED_COUNT=${#intr[@]}
+	echo "Supported network after evaluating '$LAST_STEP': $CURRENT_SUPPORTED_DIRECTED_COUNT directed introgression event(s) remain supported." >&2
+	if [[ $new_supported_count -eq 0 ]]; then
+		echo "None of the three events added for triple $LAST_ANCHOR_TRIPLE passed the B10 cutoff." >&2
+		echo "That triple is recorded as tested. No new reticulation is added by this triple; the next candidate model will carry forward all reticulations that remain supported after this round." >&2
+	fi
+
 	((step++))
 fi
 
@@ -964,7 +1231,33 @@ echo "" >&2
 echo "================================================="  >&2
 echo "Step $step: Reading D-statistic results..." >&2
 declare -a TRIPLES_ARRAY
+declare -a ALL_TRIPLES_ARRAY
 declare -A TRIPLES_RANK  # Store rank of each triple (line number)
+
+# Write a round-specific ledger.  "tested" means the triple has already served
+# as an initiating triple in a completed BPP round.  "explained" is recomputed
+# from the currently supported network and can therefore change between rounds.
+write_triple_state() {
+    local output_file="$1"
+    local current_candidate="${2-}"
+    local triple_id p1 p2 p3 status
+    {
+        printf 'P1\tP2\tP3\tstatus\n'
+        for triple_id in "${ALL_TRIPLES_ARRAY[@]}"; do
+            IFS=',' read -r p1 p2 p3 <<< "$triple_id"
+            if [[ -n "$current_candidate" && "$triple_id" == "$current_candidate" ]]; then
+                status="candidate"
+            elif [[ -n "${TESTED_TRIPLES[$triple_id]+x}" ]]; then
+                status="tested"
+            elif [[ -n "${explained_triples[$triple_id]+x}" ]]; then
+                status="explained"
+            else
+                status="pending"
+            fi
+            printf '%s\t%s\t%s\t%s\n' "$p1" "$p2" "$p3" "$status"
+        done
+    } > "$output_file"
+}
 
 if [[ -f "$DSTAT_FILE" ]]; then
 	if [[ $(wc -l < "$DSTAT_FILE") -lt 2  ]]; then
@@ -972,35 +1265,37 @@ if [[ -f "$DSTAT_FILE" ]]; then
 		exit 0
 	fi
 
-	[[ -n "$LAST_STEP" ]] && echo "Skip explained triples:" >&2
 	IFS= read -r header_line < "$DSTAT_FILE"
 	read -ra dstat_header <<< "$header_line"
 	[[ "${dstat_header[0]}" == "P1" && "${dstat_header[1]}" == "P2" && "${dstat_header[2]}" == "P3" ]] || \
 		die "D-statistic file must begin with P1, P2, and P3 columns"
-    
+
     # Read triples data (skip header)
     line_number=1
     while IFS= read -r line; do
         ((line_number++))
-        
+
         # Skip empty lines
         if [[ -z "$line" ]]; then
             continue
         fi
-        
+
 		# Extract first three columns (P1, P2, P3)
 		read -r p1 p2 p3 _ <<< "$line"
 		[[ -n "$p1" && -n "$p2" && -n "$p3" ]] || die "Malformed D-statistic row at data rank $((line_number - 1))"
-        
+
         # Create triple identifier and store data
         triple_id="${p1},${p2},${p3}"
-		if [[ -z ${explained_triples[$triple_id]} ]]; then
-        	TRIPLES_ARRAY+=("$triple_id")
-        	TRIPLES_RANK["$triple_id"]=$((line_number - 1))  # Rank starts from 1
-		else
-			echo "$triple_id" >&2
-		fi
-        
+        ALL_TRIPLES_ARRAY+=("$triple_id")
+        TRIPLES_RANK["$triple_id"]=$((line_number - 1))  # Rank starts from 1
+        if [[ -n "${TESTED_TRIPLES[$triple_id]+x}" ]]; then
+            [[ -n "${LAST_STEP-}" ]] && echo "Skip previously tested triple: $triple_id" >&2
+        elif [[ -n "${explained_triples[$triple_id]+x}" ]]; then
+            [[ -n "${LAST_STEP-}" ]] && echo "Skip triple classified as explained: $triple_id" >&2
+        else
+            TRIPLES_ARRAY+=("$triple_id")
+        fi
+
     done < <(tail -n +2 "$DSTAT_FILE")  # Skip header
 
 	# Get anchor triple (highest ranked - first data line)
@@ -1012,18 +1307,57 @@ if [[ -f "$DSTAT_FILE" ]]; then
 		if [[ -n "$LAST_STEP" ]]; then
 			echo "" >&2
         	echo "Next triple to consider: $ANCHOR_TRIPLE" >&2
+			echo "Constructing the next candidate model by carrying forward all $CURRENT_SUPPORTED_DIRECTED_COUNT directed introgression event(s) that remain supported, then adding the three candidates generated for this triple." >&2
 		else
         	echo "First triple to consider: $ANCHOR_TRIPLE" >&2
 		fi
-    else # must be the conditions with --last_step
-		echo "Workflow complete: all significant D-statistic triples are explained by supported introgression events." >&2
+    else
+        final_dir=$(dirname "$PREFIX")
+        if [[ "$final_dir" == "." ]]; then
+            FINAL_STATE_FILE="final.triple-state.tsv"
+        else
+            FINAL_STATE_FILE="$final_dir/final.triple-state.tsv"
+        fi
+        write_triple_state "$FINAL_STATE_FILE"
+        echo "Final triple-state record: $FINAL_STATE_FILE" >&2
+		echo "Workflow complete: no significant D-statistic triples remain in the candidate queue; every triple has been either classified as explained by the supported network or individually evaluated." >&2
 		if [[  ${#nonsig_int[@]} -eq 0 ]]; then
-			echo "The final model and parameter estimates are in '${LAST_STEP}.txt'." >&2
+			echo "The model evaluated in '$LAST_STEP' is already the final supported model." >&2
+			echo "No reduced-model refit is required unless you want to rerun BPP with revised priors or MCMC settings." >&2
 		else
-			echo "" >&2	
+			echo "" >&2
 			echo "=================================================" >&2
-			echo "The final introgression model contains the following introgression events:" >&2
-			ctl_con
+			echo "The final supported introgression model contains:" >&2
+            if [[ ${#adding_intro_sort[@]} -eq 0 ]]; then
+                echo "  Species tree only (no supported introgression events)." >&2
+            fi
+
+			# The --prefix value supplied for a putative next round is no longer
+			# appropriate once no unexplained triple remains. Write the reduced
+			# model as <same-directory>/final.* instead of roundN.*.
+			final_dir=$(dirname "$PREFIX")
+			if [[ "$final_dir" == "." ]]; then
+				PREFIX="final"
+			else
+				PREFIX="$final_dir/final"
+			fi
+
+			ctl_con final
+
+			# Preserve the supported-event-to-phi mapping for provenance, even
+			# though no further D-BPP iteration is expected from the final model.
+			LOG_FILE=${PREFIX}.introgression
+			cat > "$LOG_FILE" << EOF
+	tree: $new_tree
+	introgression:
+	$merged_intr_log
+EOF
+			echo "Final introgression record: $LOG_FILE" >&2
+			echo "" >&2
+			echo "=================================================" >&2
+			echo "The network-search stage is complete." >&2
+			echo "To estimate parameters under the reduced final model, run:" >&2
+			echo "bpp --cfile $CTL_FILE" >&2
 		fi
 		exit 0
     fi
@@ -1034,17 +1368,17 @@ check_monophyly() {
     local taxa=("$@")
     local taxon_list
     taxon_list=$(IFS=' '; echo "${taxa[*]}")
-    
+
     # Extract the clade containing these taxa and check if output is non-empty
     local clade_output
     clade_output=$(nw_clade -m "$TREE_FILE" $taxon_list 2>/dev/null)
 	#echo "$TREE_FILE###$clade_output" >&2
-    
+
     if [[ -n "$(echo "$clade_output" | tr -d '[:space:]')" ]]; then
-        return 0 
+        return 0
     else
 		#echo "###$taxon_list"  >&2
-        return 1 
+        return 1
     fi
 }
 
@@ -1052,17 +1386,17 @@ check_monophyly() {
 generate_good_subsets() {
     local anchor_taxon="$1"
     local diff_set=("${@:2}")  # Remaining arguments are the difference set
-    
+
     local good_subsets=()
-    
+
     # Generate all non-empty subsets that contain the anchor taxon
     local n=${#diff_set[@]}
-    
+
     # Use bitmask to generate all subsets
     for ((mask = 1; mask < (1 << n); mask++)); do
         local subset=()
         local contains_anchor=false
-        
+
         for ((i = 0; i < n; i++)); do
             if (((mask >> i) & 1)); then
                 local taxon="${diff_set[i]}"
@@ -1073,7 +1407,7 @@ generate_good_subsets() {
             fi
         done
 		#echo "###${subset[*]}" >&2
-        
+
         # Check if subset contains anchor and has at least 2 taxa
         if [[ "$contains_anchor" == true && ${#subset[@]} -ge 2 ]]; then
             # Check monophyly
@@ -1085,21 +1419,27 @@ generate_good_subsets() {
             fi
         fi
     done
-    
+
     # Return unique good subsets
     printf "%s\n" "${good_subsets[@]}" | sort -u
 }
 
-# Build difference sets
-declare -a DIFF_P3=("$ANCHOR_P3")
-declare -a DIFF_P2=("$ANCHOR_P2")
-declare -a DIFF_P1=("$ANCHOR_P1")
+# Generate ancestral-branch candidates only when --fbranch is requested.
+# The combinatorial subset search can be expensive for large related-taxon sets,
+# so the default workflow bypasses it entirely and uses the anchor triple.
+declare -a CANDIDATE_RESULTS=()
+
+if [[ "$FBRANCH" == true ]]; then
+	# Build difference sets
+	declare -a DIFF_P3=("$ANCHOR_P3")
+	declare -a DIFF_P2=("$ANCHOR_P2")
+	declare -a DIFF_P1=("$ANCHOR_P1")
 
 for triple in "${TRIPLES_ARRAY[@]:1}"; do
     p1=$(echo "$triple" | cut -d',' -f1)
     p2=$(echo "$triple" | cut -d',' -f2)
     p3=$(echo "$triple" | cut -d',' -f3)
-    
+
     # Check for shared pairs and add to difference sets
     if [[ "$p1" == "$ANCHOR_P1" && "$p2" == "$ANCHOR_P2" ]]; then
         DIFF_P3+=("$p3")
@@ -1137,15 +1477,15 @@ subset_to_array() {
 # Function to generate all triples from a candidate combination
 generate_triples_from_candidate() {
     local p1_subset_str="$1"
-    local p2_subset_str="$2" 
+    local p2_subset_str="$2"
     local p3_subset_str="$3"
-    
+
     local p1_array=($(subset_to_array "$p1_subset_str"))
     local p2_array=($(subset_to_array "$p2_subset_str"))
     local p3_array=($(subset_to_array "$p3_subset_str"))
-    
+
     local triples=()
-    
+
     for p1 in "${p1_array[@]}"; do
         for p2 in "${p2_array[@]}"; do
             for p3 in "${p3_array[@]}"; do
@@ -1154,7 +1494,7 @@ generate_triples_from_candidate() {
             done
         done
     done
-    
+
     printf "%s\n" "${triples[@]}"
 }
 
@@ -1163,16 +1503,16 @@ score_candidate() {
     local p1_subset="$1"
     local p2_subset="$2"
     local p3_subset="$3"
-    
+
     # Generate all possible triples from this candidate
     local all_triples
     all_triples=($(generate_triples_from_candidate "$p1_subset" "$p2_subset" "$p3_subset"))
-    
+
     # Check which triples exist in our dataset
     local existing_triples=()
     local total_rank=0
     local missing_count=0
-    
+
     for triple in "${all_triples[@]}"; do
         if [[ -n "${TRIPLES_RANK[$triple]}" ]]; then
             existing_triples+=("$triple")
@@ -1181,19 +1521,18 @@ score_candidate() {
             missing_count=$((missing_count + 1))
         fi
     done
-    
+
     # If any triple is missing, candidate is invalid
     if [[ $missing_count -gt 0 ]]; then
         echo "0,0,invalid"  # triples_count, rank_sum, status
         return
     fi
-    
+
     local triples_count=${#existing_triples[@]}
     echo "${triples_count},${total_rank},valid"
 }
 
 # Generate and evaluate all candidate combinations
-declare -a CANDIDATE_RESULTS
 
 # Type 1: Single dimension candidates
 for p1_subset in "${GOOD_P1_SUBSETS[@]}"; do
@@ -1267,17 +1606,20 @@ done
 #echo ""
 #echo "  Total valid candidates found: ${#CANDIDATE_RESULTS[@]}"
 
-# Select optimal candidate
-if [[ ${#CANDIDATE_RESULTS[@]} -eq 0 || "$FBRANCH" == false ]]; then
+fi  # --fbranch candidate enumeration
+
+# Select optimal candidate. Without --fbranch, or if no ancestral candidate is
+# valid, use only the highest-ranked anchor triple.
+if [[ ${#CANDIDATE_RESULTS[@]} -eq 0 ]]; then
     # Create default candidate using just the anchor triple
     ANCHOR_TRIPLE_ID="${ANCHOR_P1},${ANCHOR_P2},${ANCHOR_P3}"
     ANCHOR_RANK="${TRIPLES_RANK[$ANCHOR_TRIPLE_ID]}"
-    
+
     # Create single-element subsets for the anchor triple
     P1_SUBSET="$ANCHOR_P1"
-    P2_SUBSET="$ANCHOR_P2" 
+    P2_SUBSET="$ANCHOR_P2"
     P3_SUBSET="$ANCHOR_P3"
-   
+
     CANDIDATE_RESULTS=("SINGLE_ANCHOR:${P1_SUBSET}:${P2_SUBSET}:${P3_SUBSET}:1:${ANCHOR_RANK}")
 fi
 
@@ -1325,7 +1667,7 @@ echo "" >&2
 echo "=================================================" >&2
 echo "Step $step: Generating BPP control file template..." >&2
 
-#construct the backbone tree including ghost lineages
+#construct the species tree including ghost lineages
 ghost_id=$(echo "$new_tree" | nw_labels - | grep -o -E '(Ghost)[0-9]+' |grep -o '[0-9]\+' | sort -rn |head -1)
 inner_id=$(echo "$new_tree" | nw_labels - | grep -o -E '(N)[0-9]+' |grep -o '[0-9]\+' | sort -rn |head -1)
 ((ghost_id++))
@@ -1333,7 +1675,7 @@ inner_id=$(echo "$new_tree" | nw_labels - | grep -o -E '(N)[0-9]+' |grep -o '[0-
 newg_pos=$(echo $new_tree | nw_clade - $ANCHOR_P1 $ANCHOR_P2 $ANCHOR_P3 2>/dev/null)
 newg_pos=${newg_pos%;}
 new_tree=${new_tree/"$newg_pos"/"(Ghost$ghost_id,$newg_pos)N${inner_id}"}
-echo "The backbone tree including ghost lineages: $new_tree" >&2
+echo "The species tree including ghost lineages: $new_tree" >&2
 echo "" >&2
 
 #collecting new introgressions
@@ -1366,11 +1708,14 @@ adding_intro["$Ghost_p/Ghost$ghost_id-->$P1_p/$P1"]=1
 adding_intro["$P2_p/$P2<-->$P3_p/$P3"]=1
 adding_intro_sort+=("$Ghost_p/Ghost$ghost_id-->$P1_p/$P1"  "$P2_p/$P2<-->$P3_p/$P3")
 
-echo "All tested introgressions in the present step:" >&2 
+echo "All tested introgressions in the present step:" >&2
 ctl_con
 LOG_FILE=${PREFIX}.introgression
 cat > "$LOG_FILE" << EOF
 tree: $new_tree
-introgression: 
+introgression:
 $merged_intr_log
 EOF
+TRIPLE_STATE_FILE=${PREFIX}.triple-state.tsv
+write_triple_state "$TRIPLE_STATE_FILE" "$ANCHOR_TRIPLE"
+echo "Triple-state record: $TRIPLE_STATE_FILE" >&2
