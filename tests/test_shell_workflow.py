@@ -89,6 +89,16 @@ class ShellWorkflowTests(unittest.TestCase):
             """
             #!/usr/bin/env bash
             set -eu
+
+            # install_external.sh first verifies the downloaded archive with
+            # `tar -tzf` and later extracts it with `tar -xzf ... -C ...`.
+            # The mock must implement both code paths explicitly; otherwise a
+            # non-root CI runner can fail while accidentally passing as root.
+            if [[ "${1-}" == "-tzf" ]]; then
+                [[ -n "${2-}" ]]
+                exit 0
+            fi
+
             archive=""
             dest=""
             while [[ $# -gt 0 ]]; do
@@ -98,6 +108,8 @@ class ShellWorkflowTests(unittest.TestCase):
                     *) shift ;;
                 esac
             done
+            [[ -n "$archive" ]]
+            [[ -n "$dest" ]]
             base=$(basename "$archive" .tar.gz)
             mkdir -p "$dest/$base/bin"
             version=${base#bpp-}
